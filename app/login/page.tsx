@@ -2,18 +2,20 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export default function LoginPage() {
-  const params = useSearchParams();
-  const next = params.get("next") || "/";
-
+  const [nextUrl, setNextUrl] = useState("/");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextUrl(params.get("next") || "/");
+  }, []);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +33,7 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      window.location.href = next;
+      window.location.href = nextUrl;
     } catch (e: any) {
       setMsg(e?.message || "No se pudo iniciar sesión");
     } finally {
