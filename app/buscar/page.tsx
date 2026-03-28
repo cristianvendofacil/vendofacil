@@ -31,11 +31,17 @@ type LocationOption = {
 
 export default function BuscarPage() {
   const router = useRouter();
-  const params = useSearchParams();
+  const [query, setQuery] = useState("");
+const [town, setTown] = useState("");
+const [itemType, setItemType] = useState("listing");
 
-  const query = params.get("q") || "";
-  const town = params.get("town") || "";
-  const itemType = params.get("type") || "listing";
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+
+  setQuery(params.get("q") || "");
+  setTown(params.get("town") || "");
+  setItemType(params.get("type") || "listing");
+}, []);
 
   const [draftQuery, setDraftQuery] = useState(query);
   const [draftTown, setDraftTown] = useState(town);
