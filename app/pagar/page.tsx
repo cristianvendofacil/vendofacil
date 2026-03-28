@@ -1,7 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 type QuoteResponse = {
   ok?: boolean;
@@ -69,32 +70,36 @@ function backHref(itemType: ItemType, itemId: string) {
 }
 
 export default function PagarPage() {
-  const params = useSearchParams();
+  const [params, setParams] = useState<URLSearchParams | null>(null);
 
-  const rawItemId = params.get("itemId") || params.get("id") || "";
-  const rawItemType = params.get("itemType") || params.get("type") || "listing";
-  const rawTitle = params.get("title") || "Publicación";
-  const rawPlan = params.get("plan");
-  const rawCoupon = params.get("coupon") || "";
-  const rawAmount = Number(params.get("amount") || 0);
+  useEffect(() => {
+    setParams(new URLSearchParams(window.location.search));
+  }, []);
+
+  const rawItemId = params?.get("itemId") || params?.get("id") || "";
+  const rawItemType = params?.get("itemType") || params?.get("type") || "listing";
+  const rawTitle = params?.get("title") || "Publicación";
+  const rawPlan = params?.get("plan") || "STANDARD";
+  const rawCoupon = params?.get("coupon") || "";
+  const rawAmount = Number(params?.get("amount") || 0);
 
   const itemId = rawItemId;
   const itemType = normalizeItemType(rawItemType);
   const plan = normalizePlan(rawPlan);
 
   const featured =
-    params.get("featured") === "true" ||
-    params.get("featured") === "1" ||
+    params?.get("featured") === "true" ||
+    params?.get("featured") === "1" ||
     plan === "FEATURED";
 
   const urgent =
-    params.get("urgent") === "true" ||
-    params.get("urgent") === "1" ||
+    params?.get("urgent") === "true" ||
+    params?.get("urgent") === "1" ||
     plan === "URGENT";
 
   const petrol =
-    params.get("petrol") === "true" ||
-    params.get("petrol") === "1" ||
+    params?.get("petrol") === "true" ||
+    params?.get("petrol") === "1" ||
     plan === "PETROL";
 
   const [couponCode, setCouponCode] = useState(rawCoupon);
@@ -105,10 +110,16 @@ export default function PagarPage() {
   const [finalPrice, setFinalPrice] = useState(0);
   const [couponInfo, setCouponInfo] = useState<QuoteResponse["coupon"]>(null);
 
+  useEffect(() => {
+    setCouponCode(rawCoupon);
+  }, [rawCoupon]);
+
   const planCode = useMemo(() => planToPlanCode(plan), [plan]);
   const goBackHref = useMemo(() => backHref(itemType, itemId), [itemType, itemId]);
 
   useEffect(() => {
+    if (!params) return;
+
     const quote = async () => {
       try {
         setLoading(true);
@@ -140,9 +151,9 @@ export default function PagarPage() {
             if (res.ok) {
               setCouponInfo(data.coupon || null);
               nextFinal =
-  data.finalPrice !== undefined && data.finalPrice !== null
-    ? Number(data.finalPrice)
-    : rawAmount;
+                data.finalPrice !== undefined && data.finalPrice !== null
+                  ? Number(data.finalPrice)
+                  : rawAmount;
             }
           }
 
@@ -171,10 +182,10 @@ export default function PagarPage() {
 
         setBasePrice(Number(data.basePrice || 0));
         setFinalPrice(
-  data.finalPrice !== undefined && data.finalPrice !== null
-    ? Number(data.finalPrice)
-    : 0
-);
+          data.finalPrice !== undefined && data.finalPrice !== null
+            ? Number(data.finalPrice)
+            : 0
+        );
         setCouponInfo(data.coupon || null);
       } catch (e: any) {
         setMsg(e?.message || "Error calculando precio");
@@ -184,7 +195,7 @@ export default function PagarPage() {
     };
 
     quote();
-  }, [itemId, itemType, planCode, couponCode, rawAmount]);
+  }, [params, itemId, itemType, planCode, couponCode, rawAmount]);
 
   const aplicarCupon = async () => {
     try {
@@ -291,6 +302,10 @@ export default function PagarPage() {
       setProcessing(false);
     }
   };
+
+  if (!params) {
+    return null;
+  }
 
   if (!itemId || !itemType) {
     return (
