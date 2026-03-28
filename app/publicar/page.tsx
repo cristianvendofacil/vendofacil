@@ -1,8 +1,9 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 type PublishType = "listing" | "classified" | "job" | "meal" | "";
@@ -32,11 +33,16 @@ function getTypeLabel(type: PublishType) {
 }
 
 export default function PublicarPage() {
-  const searchParams = useSearchParams();
-  const requestedType = normalizeType(searchParams.get("type"));
-
+  const [requestedType, setRequestedType] = useState<PublishType>("");
+  const [paramsReady, setParamsReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setRequestedType(normalizeType(params.get("type")));
+    setParamsReady(true);
+  }, []);
 
   const directPath = useMemo(() => getPublishPath(requestedType), [requestedType]);
   const typeLabel = useMemo(() => getTypeLabel(requestedType), [requestedType]);
@@ -47,6 +53,8 @@ export default function PublicarPage() {
   }, [requestedType]);
 
   useEffect(() => {
+    if (!paramsReady) return;
+
     const load = async () => {
       try {
         const supabase = supabaseBrowser();
@@ -56,7 +64,9 @@ export default function PublicarPage() {
         setLoggedIn(isLogged);
 
         if (isLogged && directPath) {
-          window.location.href = directPath;
+          if (window.location.pathname !== directPath) {
+            window.location.href = directPath;
+          }
           return;
         }
       } catch {
@@ -67,9 +77,9 @@ export default function PublicarPage() {
     };
 
     load();
-  }, [directPath]);
+  }, [directPath, paramsReady]);
 
-  if (loading) {
+  if (!paramsReady || loading) {
     return (
       <main
         style={{
