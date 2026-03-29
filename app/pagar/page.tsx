@@ -19,8 +19,14 @@ type QuoteResponse = {
   } | null;
 };
 
-type ItemType = "listing" | "classified" | "job" | "meal";
-type PlanType = "STANDARD" | "FEATURED" | "URGENT" | "PETROL";
+type ItemType = "listing" | "classified" | "job" | "meal" | "verification";
+type PlanType =
+  | "STANDARD"
+  | "FEATURED"
+  | "URGENT"
+  | "PETROL"
+  | "PERSON"
+  | "BUSINESS";
 
 function normalizeItemType(value: string | null): ItemType {
   const v = String(value || "").toLowerCase().trim();
@@ -28,6 +34,7 @@ function normalizeItemType(value: string | null): ItemType {
   if (v === "classified") return "classified";
   if (v === "job") return "job";
   if (v === "meal") return "meal";
+  if (v === "verification") return "verification";
   return "listing";
 }
 
@@ -37,6 +44,8 @@ function normalizePlan(value: string | null): PlanType {
   if (v === "FEATURED") return "FEATURED";
   if (v === "URGENT") return "URGENT";
   if (v === "PETROL") return "PETROL";
+  if (v === "PERSON") return "PERSON";
+  if (v === "BUSINESS") return "BUSINESS";
   return "STANDARD";
 }
 
@@ -44,6 +53,8 @@ function planToPlanCode(plan: PlanType): string {
   if (plan === "FEATURED") return "featured";
   if (plan === "URGENT") return "urgent";
   if (plan === "PETROL") return "petrol";
+  if (plan === "PERSON") return "person";
+  if (plan === "BUSINESS") return "business";
   return "normal";
 }
 
@@ -51,6 +62,8 @@ function planLabel(plan: PlanType): string {
   if (plan === "FEATURED") return "Destacado";
   if (plan === "URGENT") return "Urgente";
   if (plan === "PETROL") return "Prioridad petrolera";
+  if (plan === "PERSON") return "Perfil verificado";
+  if (plan === "BUSINESS") return "Negocio verificado";
   return "Normal";
 }
 
@@ -58,6 +71,7 @@ function itemTypeLabel(itemType: ItemType): string {
   if (itemType === "classified") return "Clasificado";
   if (itemType === "job") return "Trabajo";
   if (itemType === "meal") return "Vianda";
+  if (itemType === "verification") return "Verificación";
   return "Inmueble";
 }
 
@@ -66,6 +80,7 @@ function backHref(itemType: ItemType, itemId: string) {
   if (itemType === "classified") return `/mis-clasificados/${itemId}`;
   if (itemType === "job") return `/mis-empleos/${itemId}`;
   if (itemType === "meal") return `/mis-viandas/${itemId}`;
+  if (itemType === "verification") return `/verificacion`;
   return `/mis-anuncios/${itemId}`;
 }
 
@@ -77,8 +92,11 @@ export default function PagarPage() {
   }, []);
 
   const rawItemId = params?.get("itemId") || params?.get("id") || "";
-  const rawItemType = params?.get("itemType") || params?.get("type") || "listing";
-  const rawTitle = params?.get("title") || "Publicación";
+  const rawItemType =
+    params?.get("itemType") || params?.get("type") || "listing";
+  const rawTitle =
+    params?.get("title") ||
+    (rawItemType === "verification" ? "Verificación" : "Publicación");
   const rawPlan = params?.get("plan") || "STANDARD";
   const rawCoupon = params?.get("coupon") || "";
   const rawAmount = Number(params?.get("amount") || 0);
@@ -125,7 +143,7 @@ export default function PagarPage() {
         setLoading(true);
         setMsg("");
 
-        if (!itemId || !itemType) {
+        if (!itemId) {
           setMsg("Faltan datos para iniciar el pago.");
           return;
         }
@@ -133,7 +151,7 @@ export default function PagarPage() {
         if (rawAmount > 0) {
           let nextFinal = rawAmount;
 
-          if (couponCode.trim()) {
+          if (couponCode.trim() && itemType !== "verification") {
             const res = await fetch("/api/pricing/quote", {
               method: "POST",
               headers: {
@@ -159,6 +177,12 @@ export default function PagarPage() {
 
           setBasePrice(rawAmount);
           setFinalPrice(nextFinal);
+          return;
+        }
+
+        if (itemType === "verification") {
+          setBasePrice(0);
+          setFinalPrice(0);
           return;
         }
 
@@ -199,6 +223,11 @@ export default function PagarPage() {
 
   const aplicarCupon = async () => {
     try {
+      if (itemType === "verification") {
+        setMsg("Los cupones para verificación todavía no están habilitados.");
+        return;
+      }
+
       setLoading(true);
       setMsg("");
 
@@ -307,7 +336,7 @@ export default function PagarPage() {
     return null;
   }
 
-  if (!itemId || !itemType) {
+  if (!itemId) {
     return (
       <main style={{ padding: 40, fontFamily: "system-ui" }}>
         <h1>Error</h1>
@@ -347,7 +376,10 @@ export default function PagarPage() {
           padding: 20,
         }}
       >
-        <div style={{ fontSize: 14, opacity: 0.7 }}>Publicación</div>
+        <div style={{ fontSize: 14, opacity: 0.7 }}>
+          {itemType === "verification" ? "Solicitud" : "Publicación"}
+        </div>
+
         <div style={{ marginTop: 6, fontSize: 24, fontWeight: 900 }}>
           {rawTitle}
         </div>
@@ -396,19 +428,21 @@ export default function PagarPage() {
               value={couponCode}
               onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
               placeholder="Ej: VACA10"
+              disabled={itemType === "verification"}
               style={{
                 flex: 1,
                 minWidth: 220,
                 padding: 12,
                 borderRadius: 10,
                 border: "1px solid #ddd",
+                background: itemType === "verification" ? "#f3f4f6" : "white",
               }}
             />
 
             <button
               type="button"
               onClick={aplicarCupon}
-              disabled={loading || processing}
+              disabled={loading || processing || itemType === "verification"}
               style={{
                 padding: "12px 16px",
                 borderRadius: 10,
@@ -416,7 +450,8 @@ export default function PagarPage() {
                 background: "#111",
                 color: "white",
                 fontWeight: 800,
-                cursor: "pointer",
+                cursor: itemType === "verification" ? "not-allowed" : "pointer",
+                opacity: itemType === "verification" ? 0.6 : 1,
               }}
             >
               Aplicar cupón
@@ -496,8 +531,8 @@ export default function PagarPage() {
           }}
         >
           {finalPrice === 0
-            ? "Como el total quedó en 0 ARS, la publicación se activará directamente sin pasar por MercadoPago."
-            : "Al pagar, volverás al sitio con el estado del pago y tu publicación se activará automáticamente cuando MercadoPago lo confirme."}
+            ? "Como el total quedó en 0 ARS, la solicitud se activará directamente sin pasar por MercadoPago."
+            : "Al pagar, volverás al sitio con el estado del pago y tu solicitud se procesará automáticamente cuando MercadoPago lo confirme."}
         </div>
 
         {!loading && (
@@ -521,7 +556,7 @@ export default function PagarPage() {
             {processing
               ? "Procesando..."
               : finalPrice === 0
-              ? "Publicar gratis"
+              ? "Activar gratis"
               : "Pagar con MercadoPago"}
           </button>
         )}
