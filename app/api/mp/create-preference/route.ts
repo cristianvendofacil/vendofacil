@@ -16,9 +16,9 @@ export async function POST(req: Request) {
     const petrol = body?.petrol === true;
     const price = Number(body?.price || 0);
 
-    if (!itemId) {
-      return NextResponse.json({ error: "itemId requerido" }, { status: 400 });
-    }
+    if (!itemId && itemType !== "verification") {
+  return NextResponse.json({ error: "itemId requerido" }, { status: 400 });
+}
 
     if (!itemType) {
       return NextResponse.json({ error: "itemType requerido" }, { status: 400 });

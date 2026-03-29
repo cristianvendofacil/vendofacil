@@ -220,14 +220,21 @@ export default function Page() {
         is_verified: false,
       };
 
-      const { error } = await supabase
+      const { data: savedRequest, error } = await supabase
         .from("verification_requests")
-        .upsert(payload, { onConflict: "user_id" });
+        .upsert(payload, { onConflict: "user_id" })
+        .select("id")
+        .single();
 
       if (error) throw error;
+      if (!savedRequest?.id) {
+        throw new Error("No se pudo obtener el ID de la verificación.");
+      }
 
       router.push(
-        `/pagar?type=verification&plan=${verificationType}&amount=${amount}&durationDays=${DURATION_DAYS}`
+        `/pagar?itemId=${encodeURIComponent(savedRequest.id)}&itemType=verification&title=${encodeURIComponent(
+          verificationType === "BUSINESS" ? "Negocio verificado" : "Perfil verificado"
+        )}&plan=${encodeURIComponent(verificationType)}&amount=${amount}&durationDays=${DURATION_DAYS}`
       );
     } catch (e: any) {
       setMsg(e?.message || "Error preparando verificación");
