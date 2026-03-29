@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
-const PLAN_FREE = 0;
-const PLAN_URGENT = 2500;
 const PLAN_DURATION_LABEL = "30 días";
 
 type LocationRow = {
@@ -27,6 +25,15 @@ type JobRow = {
   job_type: "SEEKING" | "OFFERING" | null;
 };
 
+type PricingRuleRow = {
+  id: string;
+  item_type: string;
+  plan_code: string;
+  title: string | null;
+  price_ars: number;
+  is_active: boolean;
+};
+
 export default function Page() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -35,6 +42,7 @@ export default function Page() {
   const [msg, setMsg] = useState("Cargando...");
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [pricingLoading, setPricingLoading] = useState(true);
 
   const [title, setTitle] = useState("");
   const [town, setTown] = useState("");
@@ -42,8 +50,9 @@ export default function Page() {
   const [description, setDescription] = useState("");
   const [jobType, setJobType] = useState<"SEEKING" | "OFFERING">("SEEKING");
 
-  const [plan, setPlan] = useState<"FREE" | "URGENT">("FREE");
+  const [selectedPlanCode, setSelectedPlanCode] = useState("normal");
   const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [pricingRules, setPricingRules] = useState<PricingRuleRow[]>([]);
 
   const canPublish = useMemo(() => {
     return (
@@ -54,15 +63,63 @@ export default function Page() {
     );
   }, [title, town, whatsapp, description]);
 
+  const jobPlans = useMemo(() => {
+    const order: Record<string, number> = {
+      normal: 1,
+      urgent: 2,
+      featured: 3,
+      petrol: 4,
+    };
+
+    return pricingRules
+      .filter((rule) => String(rule.item_type || "").toLowerCase() === "job" && rule.is_active)
+      .map((rule) => ({
+        ...rule,
+        plan_code: String(rule.plan_code || "").toLowerCase(),
+      }))
+      .sort((a, b) => {
+        const aOrder = order[a.plan_code] ?? 999;
+        const bOrder = order[b.plan_code] ?? 999;
+
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return (a.title || "").localeCompare(b.title || "");
+      });
+  }, [pricingRules]);
+
+  const selectedRule = useMemo(() => {
+    return (
+      jobPlans.find((rule) => rule.plan_code === selectedPlanCode) ||
+      jobPlans[0] ||
+      null
+    );
+  }, [jobPlans, selectedPlanCode]);
+
+  const amount = useMemo(() => {
+    return selectedRule ? Number(selectedRule.price_ars || 0) : 0;
+  }, [selectedRule]);
+
   useEffect(() => {
     load();
   }, [id]);
 
+  useEffect(() => {
+    if (jobPlans.length > 0) {
+      const stillExists = jobPlans.some(
+        (rule) => rule.plan_code === selectedPlanCode
+      );
+
+      if (!stillExists) {
+        setSelectedPlanCode(jobPlans[0].plan_code);
+      }
+    }
+  }, [jobPlans, selectedPlanCode]);
+
   const load = async () => {
     try {
       setMsg("Cargando...");
-      await loadLocations();
-      await loadJob();
+
+      await Promise.all([loadLocations(), loadJob(), loadPricing()]);
+
       setMsg("");
     } catch (e: any) {
       setMsg(e?.message || "Error cargando empleo");
@@ -112,6 +169,26 @@ export default function Page() {
     setJobType(row.job_type || "SEEKING");
   };
 
+  const loadPricing = async () => {
+    try {
+      setPricingLoading(true);
+
+      const res = await fetch("/api/pricing/public", {
+        cache: "no-store",
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        throw new Error(json?.error || "No se pudieron cargar los precios");
+      }
+
+      setPricingRules((json?.data ?? []) as PricingRuleRow[]);
+    } finally {
+      setPricingLoading(false);
+    }
+  };
+
   const buildPayload = () => ({
     title: title.trim(),
     town: town.trim(),
@@ -156,9 +233,14 @@ export default function Page() {
         return;
       }
 
+      if (!selectedRule) {
+        setMsg("No hay un plan activo disponible para trabajo.");
+        return;
+      }
+
       const supabase = supabaseBrowser();
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("jobs")
         .update({
           ...buildPayload(),
@@ -166,12 +248,21 @@ export default function Page() {
         })
         .eq("id", id);
 
-      const amount = plan === "URGENT" ? PLAN_URGENT : PLAN_FREE;
+      if (updateError) throw updateError;
+
+      const planCode = selectedRule.plan_code;
+      const planParam = planCodeToPagarPlan(planCode);
 
       router.push(
-        `/pagar?type=job&id=${id}&amount=${amount}&urgent=${
-          plan === "URGENT" ? 1 : 0
-        }`
+        `/pagar?itemType=job&id=${encodeURIComponent(
+          String(id || "")
+        )}&title=${encodeURIComponent(
+          title.trim() || "Trabajo"
+        )}&amount=${amount}&plan=${encodeURIComponent(
+          planParam
+        )}&featured=${planCode === "featured" ? 1 : 0}&urgent=${
+          planCode === "urgent" ? 1 : 0
+        }&petrol=${planCode === "petrol" ? 1 : 0}`
       );
     } catch (e: any) {
       setMsg(e?.message || "Error preparando publicación");
@@ -194,7 +285,6 @@ export default function Page() {
 
         {msg && <p style={{ marginTop: 10 }}>{msg}</p>}
 
-        {/* FORM */}
         <div style={card}>
           <SectionTitle text="Información del puesto" />
 
@@ -205,12 +295,20 @@ export default function Page() {
             style={input}
           />
 
-          <select value={jobType} onChange={(e) => setJobType(e.target.value as any)} style={input}>
+          <select
+            value={jobType}
+            onChange={(e) => setJobType(e.target.value as "SEEKING" | "OFFERING")}
+            style={input}
+          >
             <option value="SEEKING">Busco trabajo</option>
             <option value="OFFERING">Ofrezco trabajo</option>
           </select>
 
-          <select value={town} onChange={(e) => setTown(e.target.value)} style={input}>
+          <select
+            value={town}
+            onChange={(e) => setTown(e.target.value)}
+            style={input}
+          >
             <option value="">Elegí localidad</option>
             {locations.map((loc) => (
               <option key={loc.id} value={loc.name}>
@@ -234,44 +332,51 @@ export default function Page() {
           />
         </div>
 
-        {/* PLANES */}
         <div style={card}>
           <SectionTitle text="Impulsa tu publicación" />
 
-          <div style={{ display: "grid", gap: 12 }}>
-            <PlanCard
-              active={plan === "FREE"}
-              onClick={() => setPlan("FREE")}
-              title="Publicación estándar"
-              price="$0"
-              desc="Publicación normal"
-            />
-
-            <PlanCard
-              active={plan === "URGENT"}
-              onClick={() => setPlan("URGENT")}
-              title="🔴 Publicación urgente"
-              price={`$${PLAN_URGENT}`}
-              desc="Arriba de todo durante 9 días"
-              highlight
-            />
-          </div>
+          {pricingLoading ? (
+            <div style={{ color: "#64748B" }}>Cargando planes...</div>
+          ) : jobPlans.length === 0 ? (
+            <div style={{ color: "#b91c1c", fontWeight: 700 }}>
+              No hay planes activos para trabajo. Revisa el admin.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 12 }}>
+              {jobPlans.map((rule) => (
+                <PlanCard
+                  key={rule.id}
+                  active={selectedPlanCode === rule.plan_code}
+                  onClick={() => setSelectedPlanCode(rule.plan_code)}
+                  title={rule.title?.trim() || defaultPlanTitle("job", rule.plan_code)}
+                  price={formatPrice(rule.price_ars)}
+                  desc={defaultPlanDescription("job", rule.plan_code)}
+                  highlight={rule.plan_code !== "normal"}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* CTA */}
         <div style={ctaBox}>
           <div>
-            Total:{" "}
-            <b>${plan === "URGENT" ? PLAN_URGENT : PLAN_FREE} ARS</b>
+            Total: <b>{amount === 0 ? "Gratis" : `$${amount} ARS`}</b>
+            <div style={{ marginTop: 4, fontSize: 13, color: "#64748B" }}>
+              {PLAN_DURATION_LABEL}
+            </div>
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={saveDraft} style={secondaryBtn}>
-              Guardar
+            <button onClick={saveDraft} style={secondaryBtn} disabled={saving}>
+              {saving ? "Guardando..." : "Guardar"}
             </button>
 
-            <button onClick={continueToPayment} style={primaryBtn}>
-              Continuar →
+            <button
+              onClick={continueToPayment}
+              style={primaryBtn}
+              disabled={publishing || pricingLoading || !selectedRule}
+            >
+              {publishing ? "Preparando..." : "Continuar →"}
             </button>
           </div>
         </div>
@@ -280,14 +385,45 @@ export default function Page() {
   );
 }
 
-/* COMPONENTES UI */
+function planCodeToPagarPlan(planCode: string): string {
+  const normalized = String(planCode || "").toLowerCase();
+
+  if (normalized === "featured") return "FEATURED";
+  if (normalized === "urgent") return "URGENT";
+  if (normalized === "petrol") return "PETROL";
+  return "STANDARD";
+}
+
+function formatPrice(value: number | null | undefined): string {
+  const amount = Number(value || 0);
+  return amount === 0 ? "Gratis" : `$${amount}`;
+}
+
+function defaultPlanTitle(itemType: string, planCode: string): string {
+  const item = itemType === "job" ? "Trabajo" : "Publicación";
+  const normalized = String(planCode || "").toLowerCase();
+
+  if (normalized === "featured") return `${item} destacado`;
+  if (normalized === "urgent") return `${item} urgente`;
+  if (normalized === "petrol") return `${item} petrolero`;
+  return `${item} estándar`;
+}
+
+function defaultPlanDescription(itemType: string, planCode: string): string {
+  const normalized = String(planCode || "").toLowerCase();
+
+  if (itemType === "job") {
+    if (normalized === "urgent") return "Arriba de todo durante 9 días";
+    if (normalized === "featured") return "Mayor visibilidad dentro de la sección";
+    if (normalized === "petrol") return "Mayor prioridad para el entorno petrolero";
+    return "Publicación normal";
+  }
+
+  return "Publicación";
+}
 
 function SectionTitle({ text }: { text: string }) {
-  return (
-    <div style={{ fontWeight: 900, marginBottom: 10 }}>
-      {text}
-    </div>
-  );
+  return <div style={{ fontWeight: 900, marginBottom: 10 }}>{text}</div>;
 }
 
 function PlanCard({
@@ -297,7 +433,14 @@ function PlanCard({
   price,
   desc,
   highlight,
-}: any) {
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  price: string;
+  desc: string;
+  highlight?: boolean;
+}) {
   return (
     <div
       onClick={onClick}
@@ -306,17 +449,17 @@ function PlanCard({
         borderRadius: 10,
         cursor: "pointer",
         border: active ? "2px solid #F97316" : "1px solid #ddd",
-        background: highlight ? "#fff3f3" : "white",
+        background: highlight ? "#fff7ed" : "white",
       }}
     >
       <strong>{title}</strong>
-      <div>{price} / 30 días</div>
+      <div>
+        {price} / {PLAN_DURATION_LABEL}
+      </div>
       <small>{desc}</small>
     </div>
   );
 }
-
-/* ESTILOS */
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
