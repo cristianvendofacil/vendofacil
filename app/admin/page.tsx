@@ -1608,7 +1608,7 @@ function PricingCard({
         type="button"
         onClick={() => {
           const parsed = Number(price);
-          if (!parsed || parsed <= 0) {
+          if (isNaN(parsed) || parsed < 0) {
             alert("Precio inválido");
             return;
           }
