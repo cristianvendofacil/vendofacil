@@ -143,7 +143,7 @@ export default function PagarPage() {
         setLoading(true);
         setMsg("");
 
-        if (!itemId) {
+        if (!itemId && itemType !== "verification") {
           setMsg("Faltan datos para iniciar el pago.");
           return;
         }
@@ -336,7 +336,7 @@ export default function PagarPage() {
     return null;
   }
 
-  if (!itemId) {
+  if (!itemId && itemType !== "verification") {
     return (
       <main style={{ padding: 40, fontFamily: "system-ui" }}>
         <h1>Error</h1>
