@@ -11,8 +11,15 @@ async function resolveTableSafe(
   if (itemType === "job") return "jobs";
   if (itemType === "meal") return "meals";
   if (itemType === "listing") return "listings";
+  if (itemType === "verification") return "verification_requests";
 
-  const tables = ["listings", "classifieds", "jobs", "meals"];
+  const tables = [
+    "listings",
+    "classifieds",
+    "jobs",
+    "meals",
+    "verification_requests",
+  ];
 
   for (const table of tables) {
     const { data } = await supabase
@@ -29,6 +36,58 @@ async function resolveTableSafe(
   return "listings";
 }
 
+function parseBool(value: any): boolean {
+  if (value === true) return true;
+  if (value === false) return false;
+  const v = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
+}
+
+async function resolvePaymentIdFromMerchantOrder(
+  accessToken: string,
+  merchantOrderId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://api.mercadopago.com/merchant_orders/${merchantOrderId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("MERCHANT ORDER FETCH ERROR:", text);
+      return null;
+    }
+
+    const order = await res.json();
+    const payments = Array.isArray(order?.payments) ? order.payments : [];
+
+    const approved = payments.find(
+      (p: any) =>
+        String(p?.status || "").toLowerCase() === "approved" && p?.id
+    );
+
+    if (approved?.id) return String(approved.id);
+
+    const anyPayment = payments.find((p: any) => p?.id);
+    if (anyPayment?.id) return String(anyPayment.id);
+
+    return null;
+  } catch (e) {
+    console.error("resolvePaymentIdFromMerchantOrder ERROR:", e);
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const accessToken = process.env.MP_ACCESS_TOKEN;
@@ -36,7 +95,10 @@ export async function POST(req: Request) {
     const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!accessToken) {
-      return NextResponse.json({ error: "Falta MP_ACCESS_TOKEN" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Falta MP_ACCESS_TOKEN" },
+        { status: 500 }
+      );
     }
 
     if (!supabaseUrl) {
@@ -54,11 +116,10 @@ export async function POST(req: Request) {
     }
 
     const url = new URL(req.url);
-    const topic = url.searchParams.get("topic") || url.searchParams.get("type") || "";
-
-    if (topic === "merchant_order") {
-      return NextResponse.json({ ok: true, ignored: "merchant_order" });
-    }
+    const topic =
+      url.searchParams.get("topic") ||
+      url.searchParams.get("type") ||
+      "";
 
     const bodyText = await req.text();
 
@@ -70,15 +131,44 @@ export async function POST(req: Request) {
     }
 
     const bodyType = String(body?.type || body?.topic || "").trim();
-    if (bodyType === "merchant_order") {
-      return NextResponse.json({ ok: true, ignored: "merchant_order_body" });
-    }
 
-    const paymentId =
+    let paymentId =
       url.searchParams.get("data.id") ||
       body?.data?.id ||
       body?.id ||
-      (typeof body?.resource === "string" ? body.resource.split("/").pop() : null);
+      (typeof body?.resource === "string" &&
+      body.resource.includes("/payments/")
+        ? body.resource.split("/").pop()
+        : null);
+
+    const isMerchantOrder =
+      topic === "merchant_order" || bodyType === "merchant_order";
+
+    if (isMerchantOrder) {
+      const merchantOrderId =
+        body?.data?.id ||
+        body?.id ||
+        (typeof body?.resource === "string"
+          ? body.resource.split("/").pop()
+          : null);
+
+      if (merchantOrderId) {
+        const resolved = await resolvePaymentIdFromMerchantOrder(
+          accessToken,
+          String(merchantOrderId)
+        );
+
+        if (resolved) {
+          paymentId = resolved;
+        } else {
+          return NextResponse.json({
+            ok: true,
+            ignored: "merchant_order_without_payment",
+            merchantOrderId: String(merchantOrderId),
+          });
+        }
+      }
+    }
 
     if (!paymentId) {
       return NextResponse.json({ ok: true, note: "No payment id" });
@@ -139,8 +229,6 @@ export async function POST(req: Request) {
       currency: String(payment.currency_id || "ARS"),
     };
 
-    // SOLO guardar en payments cuando el item pertenece a listings,
-    // porque payments.listing_id tiene FK contra listings.id
     if (table === "listings") {
       const upsertRes = await supabase.from("payments").upsert(paymentPayload, {
         onConflict: "provider_payment_id",
@@ -148,13 +236,13 @@ export async function POST(req: Request) {
 
       if (upsertRes.error) {
         console.error("PAYMENTS UPSERT ERROR:", upsertRes.error);
-        return NextResponse.json({ error: upsertRes.error.message }, { status: 500 });
+        // no frenamos la publicación por esto
       }
     } else {
       console.log("⏭️ Saltando payments (no es listing):", table);
     }
 
-    if (status !== "approved") {
+    if (status.toLowerCase() !== "approved") {
       return NextResponse.json({ ok: true, status });
     }
 
@@ -171,24 +259,26 @@ export async function POST(req: Request) {
       updateData.is_published = true;
     }
 
-    if (metadata.featured) {
+    if (table === "verification_requests") {
+      updateData.status = "PENDING_REVIEW";
+      updateData.payment_status = "APPROVED";
+      updateData.paid_at = new Date().toISOString();
+    }
+
+    if (parseBool(metadata.featured)) {
       updateData.featured_until = publishedUntil;
     }
 
-    if (metadata.urgent) {
+    if (parseBool(metadata.urgent)) {
       updateData.urgent_until = publishedUntil;
     }
 
-    if (metadata.petrol) {
+    if (parseBool(metadata.petrol)) {
       updateData.petrol_priority = true;
       updateData.petrol_priority_until = publishedUntil;
     }
 
-    let updRes = await supabase
-      .from(table)
-      .update(updateData)
-      .eq("id", itemId)
-      .select();
+    let updRes = await supabase.from(table).update(updateData).eq("id", itemId).select();
 
     if (!updRes.error && (!updRes.data || updRes.data.length === 0)) {
       console.log("⚠️ No encontró por id, probando por listing_id...");
