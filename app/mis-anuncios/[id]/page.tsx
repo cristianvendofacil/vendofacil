@@ -225,10 +225,7 @@ export default function ListingEditorPage() {
       }
 
       const pricingRules = (pricingRulesResult.data ?? []) as PricingRuleRow[];
-console.log("PRICING RULES LISTING:", pricingRules);
-setMsg("pricing loaded: " + JSON.stringify(pricingRules));
-
-setPlanConfig(buildPlanConfigFromRules(pricingRules));
+      setPlanConfig(buildPlanConfigFromRules(pricingRules));
 
       setLocations((locationsResult.data ?? []) as LocationRow[]);
       setTitle(row.title || "");
