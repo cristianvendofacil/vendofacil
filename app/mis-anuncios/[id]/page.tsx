@@ -21,7 +21,16 @@ type PlanConfig = {
   note: string;
 };
 
-const PLAN_CONFIG: Record<PlanType, PlanConfig> = {
+type PricingRuleRow = {
+  id: string;
+  item_type: string;
+  plan_code: string;
+  title: string;
+  price_ars: number;
+  is_active: boolean;
+};
+
+const FALLBACK_PLAN_CONFIG: Record<PlanType, PlanConfig> = {
   STANDARD: {
     label: "Publicación estándar",
     price: 4000,
@@ -63,6 +72,39 @@ const PLAN_CONFIG: Record<PlanType, PlanConfig> = {
     note: "Incluye hasta 10 fotos y máxima visibilidad.",
   },
 };
+
+function buildPlanConfigFromRules(
+  rules: PricingRuleRow[]
+): Record<PlanType, PlanConfig> {
+  const getPrice = (code: string, fallback: number) => {
+    const rule = rules.find(
+      (r) =>
+        String(r.item_type || "").toLowerCase() === "listing" &&
+        String(r.plan_code || "").toLowerCase() === code &&
+        r.is_active
+    );
+    return rule?.price_ars ?? fallback;
+  };
+
+  return {
+    STANDARD: {
+      ...FALLBACK_PLAN_CONFIG.STANDARD,
+      price: getPrice("normal", FALLBACK_PLAN_CONFIG.STANDARD.price),
+    },
+    FEATURED: {
+      ...FALLBACK_PLAN_CONFIG.FEATURED,
+      price: getPrice("featured", FALLBACK_PLAN_CONFIG.FEATURED.price),
+    },
+    URGENT: {
+      ...FALLBACK_PLAN_CONFIG.URGENT,
+      price: getPrice("urgent", FALLBACK_PLAN_CONFIG.URGENT.price),
+    },
+    PETROL: {
+      ...FALLBACK_PLAN_CONFIG.PETROL,
+      price: getPrice("petrol", FALLBACK_PLAN_CONFIG.PETROL.price),
+    },
+  };
+}
 
 type LocationRow = {
   id: string;
@@ -108,13 +150,16 @@ export default function ListingEditorPage() {
   const [currency] = useState("ARS");
 
   const [plan, setPlan] = useState<PlanType>("STANDARD");
+  const [planConfig, setPlanConfig] =
+    useState<Record<PlanType, PlanConfig>>(FALLBACK_PLAN_CONFIG);
+
   const [locations, setLocations] = useState<LocationRow[]>([]);
 
   const [userId, setUserId] = useState("");
   const [photoPaths, setPhotoPaths] = useState<string[]>([]);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
 
-  const selectedPlan = PLAN_CONFIG[plan];
+  const selectedPlan = planConfig[plan];
   const maxPhotosForPlan = selectedPlan.photoLimit;
   const totalAmount = selectedPlan.price;
 
@@ -155,7 +200,7 @@ export default function ListingEditorPage() {
 
       setUserId(userData.user.id);
 
-      const [locationsResult, listingResult] = await Promise.all([
+      const [locationsResult, listingResult, pricingRulesResult] = await Promise.all([
         supabase
           .from("locations")
           .select("id,name,region,province,is_featured")
@@ -163,16 +208,27 @@ export default function ListingEditorPage() {
           .order("region", { ascending: true })
           .order("name", { ascending: true }),
         supabase.from("listings").select("*").eq("id", id).single(),
+        supabase
+          .from("pricing_rules")
+          .select("id,item_type,plan_code,title,price_ars,is_active")
+          .eq("item_type", "listing"),
       ]);
 
       if (locationsResult.error) throw locationsResult.error;
       if (listingResult.error) throw listingResult.error;
+      if (pricingRulesResult.error) throw pricingRulesResult.error;
 
       const row = listingResult.data as ListingRow;
 
       if (row.user_id !== userData.user.id) {
         throw new Error("No tienes permiso para editar este inmueble.");
       }
+
+      const pricingRules = (pricingRulesResult.data ?? []) as PricingRuleRow[];
+console.log("PRICING RULES LISTING:", pricingRules);
+setMsg("pricing loaded: " + JSON.stringify(pricingRules));
+
+setPlanConfig(buildPlanConfigFromRules(pricingRules));
 
       setLocations((locationsResult.data ?? []) as LocationRow[]);
       setTitle(row.title || "");
@@ -545,8 +601,8 @@ export default function ListingEditorPage() {
               <div style={sectionTitle}>Elegí tu plan</div>
 
               <div style={planList}>
-                {(Object.keys(PLAN_CONFIG) as PlanType[]).map((planKey) => {
-                  const config = PLAN_CONFIG[planKey];
+                {(Object.keys(planConfig) as PlanType[]).map((planKey) => {
+                  const config = planConfig[planKey];
                   const active = plan === planKey;
 
                   return (
