@@ -98,6 +98,15 @@ type LocationRow = {
   province: string | null;
   is_featured: boolean | null;
 };
+type ContactMessage = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  reason: string;
+  message: string;
+  created_at: string;
+};
 
 type AdminFilter = "ALL" | "URGENT" | "FEATURED" | "PUBLISHED" | "DRAFT" | "PETROL";
 type AdminSection =
@@ -106,7 +115,8 @@ type AdminSection =
   | "pricing"
   | "coupons"
   | "locations"
-  | "verifications";
+  | "verifications"
+  | "messages";
 
 function getAdminEmails() {
   return (process.env.NEXT_PUBLIC_ADMIN_EMAILS || "")
@@ -141,6 +151,7 @@ export default function AdminPage() {
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
 
   const [newCoupon, setNewCoupon] = useState({
     code: "",
@@ -188,10 +199,19 @@ export default function AdminPage() {
       setMsg("Cargando...");
       await checkAccess();
 
-      const supabase = supabaseBrowser();
+    const supabase = supabaseBrowser();
 
-      const [verRes, lRes, cRes, jRes, mRes, pricingRes, couponsRes, locationsRes] =
-        await Promise.all([
+      const [
+      verRes,
+      lRes,
+      cRes,
+      jRes,
+      mRes,
+      pricingRes,
+      couponsRes,
+      locationsRes,
+      contactRes,
+     ] = await Promise.all([
           supabase
             .from("verification_requests")
             .select(
@@ -251,6 +271,11 @@ export default function AdminPage() {
             .order("is_featured", { ascending: false })
             .order("region", { ascending: true })
             .order("name", { ascending: true }),
+            supabase
+            .from("contact_messages")
+            .select("id,name,email,phone,reason,message,created_at")
+            .order("created_at", { ascending: false })
+            .limit(100),
         ]);
 
       if (verRes.error) throw verRes.error;
@@ -261,6 +286,7 @@ export default function AdminPage() {
       if (pricingRes.error) throw pricingRes.error;
       if (couponsRes.error) throw couponsRes.error;
       if (locationsRes.error) throw locationsRes.error;
+      if (contactRes.error) throw contactRes.error;
 
       setVerifications((verRes.data ?? []) as VerificationItem[]);
       setListings((lRes.data ?? []) as ListingItem[]);
@@ -270,6 +296,7 @@ export default function AdminPage() {
       setPricingRules((pricingRes.data ?? []) as PricingRule[]);
       setCoupons((couponsRes.data ?? []) as Coupon[]);
       setLocations((locationsRes.data ?? []) as LocationRow[]);
+      setContactMessages((contactRes.data ?? []) as ContactMessage[]);
 
       setMsg("");
     } catch (e: any) {
@@ -805,6 +832,11 @@ export default function AdminPage() {
           active={section === "verifications"}
           onClick={() => setSection("verifications")}
         />
+        <Tab
+          label="Mensajes"
+          active={section === "messages"}
+          onClick={() => setSection("messages")}
+/>
       </div>
 
       {section === "dashboard" && (
@@ -1310,6 +1342,55 @@ export default function AdminPage() {
           </section>
         </>
       )}
+      {section === "messages" && (
+  <section style={{ marginTop: 40 }}>
+    <h2>Mensajes de contacto</h2>
+
+    <div style={grid}>
+      {contactMessages.length > 0 ? (
+        contactMessages.map((item) => (
+          <div key={item.id} style={box}>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>
+              {item.name || "Sin nombre"}
+            </div>
+
+            <div style={{ marginTop: 8 }}>
+              <b>Email:</b> {item.email}
+            </div>
+
+            <div style={{ marginTop: 4 }}>
+              <b>Teléfono:</b> {item.phone || "-"}
+            </div>
+
+            <div style={{ marginTop: 4 }}>
+              <b>Motivo:</b> {item.reason}
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <b>Mensaje:</b>
+              <div
+                style={{
+                  marginTop: 6,
+                  whiteSpace: "pre-wrap",
+                  opacity: 0.88,
+                  lineHeight: 1.5,
+                }}
+              >
+                {item.message}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>
+              {new Date(item.created_at).toLocaleString()}
+            </div>
+          </div>
+        ))
+      ) : (
+        <div style={box}>No hay mensajes todavía.</div>
+      )}
+    </div>
+  </section>
+)}
     </main>
   );
 }
