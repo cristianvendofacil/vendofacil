@@ -19,18 +19,28 @@ export default function RegistroPage() {
       setMsg("");
 
       if (!accepted) {
-        setMsg("Debes aceptar los Términos y Condiciones.");
+        setMsg("Debes aceptar los Términos y Condiciones");
         return;
       }
 
       const supabase = supabaseBrowser();
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: password.trim(),
       });
 
       if (error) throw error;
+
+      const user = data.user;
+
+      if (user) {
+        await supabase.from("profiles").insert({
+          id: user.id,
+          email: user.email,
+          terms_accepted_at: new Date().toISOString(),
+        });
+      }
 
       setMsg("Cuenta creada correctamente. Ahora inicia sesión.");
       setTimeout(() => {
@@ -82,28 +92,23 @@ export default function RegistroPage() {
           style={input}
         />
 
-        {/* ✅ CHECKBOX NUEVO */}
-        <label
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            fontSize: 14,
-          }}
-        >
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
           <input
             type="checkbox"
             checked={accepted}
             onChange={(e) => setAccepted(e.target.checked)}
+            style={{ marginTop: 4 }}
           />
-          Acepto los{" "}
-          <a
-            href="/terminos"
-            target="_blank"
-            style={{ color: "#0a7cff", fontWeight: 700 }}
-          >
-            Términos y Condiciones
-          </a>
+          <span style={{ fontSize: 14 }}>
+            Acepto los{" "}
+            <a
+              href="/terminos"
+              target="_blank"
+              style={{ color: "#0a7cff", fontWeight: 700 }}
+            >
+              Términos y Condiciones
+            </a>
+          </span>
         </label>
 
         <button
