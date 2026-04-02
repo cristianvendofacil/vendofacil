@@ -9,6 +9,7 @@ export default function RegistroPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -16,6 +17,11 @@ export default function RegistroPage() {
     try {
       setLoading(true);
       setMsg("");
+
+      if (!accepted) {
+        setMsg("Debes aceptar los Términos y Condiciones.");
+        return;
+      }
 
       const supabase = supabaseBrowser();
 
@@ -75,6 +81,30 @@ export default function RegistroPage() {
           onChange={(e) => setPassword(e.target.value)}
           style={input}
         />
+
+        {/* ✅ CHECKBOX NUEVO */}
+        <label
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            fontSize: 14,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+          />
+          Acepto los{" "}
+          <a
+            href="/terminos"
+            target="_blank"
+            style={{ color: "#0a7cff", fontWeight: 700 }}
+          >
+            Términos y Condiciones
+          </a>
+        </label>
 
         <button
           type="button"
