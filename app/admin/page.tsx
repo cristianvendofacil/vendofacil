@@ -677,6 +677,28 @@ export default function AdminPage() {
       setWorkingId("");
     }
   };
+  const deleteContactMessage = async (id: string) => {
+  try {
+    const ok = window.confirm("¿Seguro que quieres eliminar este mensaje?");
+    if (!ok) return;
+
+    setWorkingId(id);
+    const supabase = supabaseBrowser();
+
+    const { error } = await supabase
+      .from("contact_messages")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    await load();
+  } catch (e: any) {
+    setMsg(e?.message || "Error eliminando mensaje");
+  } finally {
+    setWorkingId("");
+  }
+};
 
   const pendingVerifications = verifications.filter((x) => x.status === "PENDING");
 
@@ -1401,6 +1423,24 @@ export default function AdminPage() {
 >
   Responder
 </a>
+<button
+  type="button"
+  onClick={() => deleteContactMessage(item.id)}
+  disabled={workingId === item.id}
+  style={{
+    marginTop: 12,
+    marginLeft: 12,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "none",
+    background: "#c62828",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+  }}
+>
+  {workingId === item.id ? "Eliminando..." : "Eliminar"}
+</button>
           </div>
         ))
       ) : (
