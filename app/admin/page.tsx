@@ -273,7 +273,7 @@ export default function AdminPage() {
             .order("name", { ascending: true }),
             supabase
             .from("contact_messages")
-            .select("id,name,email,phone,reason,message,created_at")
+            .select("id,name,email,phone,reason,message,created_at,is_read")
             .order("created_at", { ascending: false })
             .limit(100),
         ]);
@@ -695,6 +695,25 @@ export default function AdminPage() {
     await load();
   } catch (e: any) {
     setMsg(e?.message || "Error eliminando mensaje");
+  } finally {
+    setWorkingId("");
+  }
+};
+const markAsRead = async (id: string) => {
+  try {
+    setWorkingId(id);
+    const supabase = supabaseBrowser();
+
+    const { error } = await supabase
+      .from("contact_messages")
+      .update({ is_read: true })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    await load();
+  } catch (e: any) {
+    setMsg(e?.message || "Error marcando como leído");
   } finally {
     setWorkingId("");
   }
@@ -1440,6 +1459,24 @@ export default function AdminPage() {
   }}
 >
   {workingId === item.id ? "Eliminando..." : "Eliminar"}
+</button>
+<button
+  type="button"
+  onClick={() => markAsRead(item.id)}
+  disabled={workingId === item.id}
+  style={{
+    marginTop: 12,
+    marginLeft: 12,
+    padding: "8px 12px",
+    borderRadius: 8,
+    border: "none",
+    background: "#4caf50",
+    color: "white",
+    fontWeight: 800,
+    cursor: "pointer",
+  }}
+>
+  {workingId === item.id ? "Procesando..." : "Marcar leído"}
 </button>
           </div>
         ))
