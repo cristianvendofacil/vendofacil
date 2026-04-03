@@ -1383,6 +1383,20 @@ export default function AdminPage() {
             <div style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>
               {new Date(item.created_at).toLocaleString()}
             </div>
+            <a
+              href={`mailto:${item.email}?subject=Respuesta%20a%20tu%20consulta&body=Hola%20${encodeURIComponent(
+              item.name || ""
+              )},%0D%0A%0D%0A`}
+              style={{
+              display: "inline-block",
+              marginTop: 12,
+              color: "#0a7cff",
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            Responder
+          </a>
           </div>
         ))
       ) : (
