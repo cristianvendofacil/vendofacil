@@ -1384,19 +1384,23 @@ export default function AdminPage() {
               {new Date(item.created_at).toLocaleString()}
             </div>
             <a
-              href={`mailto:${item.email}?subject=Respuesta%20a%20tu%20consulta&body=Hola%20${encodeURIComponent(
-              item.name || ""
-              )},%0D%0A%0D%0A`}
-              style={{
-              display: "inline-block",
-              marginTop: 12,
-              color: "#0a7cff",
-              fontWeight: 800,
-              textDecoration: "none",
-            }}
-          >
-            Responder
-          </a>
+  href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(
+    item.email
+  )}&su=${encodeURIComponent(
+    "Respuesta a tu consulta"
+  )}&body=${encodeURIComponent(`Hola ${item.name || ""},\n\n`)}`}
+  target="_blank"
+  rel="noreferrer"
+  style={{
+    display: "inline-block",
+    marginTop: 12,
+    color: "#0a7cff",
+    fontWeight: 800,
+    textDecoration: "none",
+  }}
+>
+  Responder
+</a>
           </div>
         ))
       ) : (
