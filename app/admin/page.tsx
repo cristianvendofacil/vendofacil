@@ -590,16 +590,32 @@ export default function AdminPage() {
 
     const supabase = supabaseBrowser();
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("coupons")
       .update({
         is_active: !isActive,
       })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
 
-    if (error) throw error;
+    if (error) {
+      setMsg("Error Supabase: " + error.message);
+      throw error;
+    }
 
-    await load();
+    if (!data || data.length === 0) {
+      setMsg("No se actualizó ningún cupón. Puede ser un problema de permisos o de filtro.");
+      return;
+    }
+
+    setCoupons((prev) =>
+      prev.map((coupon) =>
+        coupon.id === id
+          ? { ...coupon, is_active: !isActive }
+          : coupon
+      )
+    );
+
     setMsg(`Cupón ${!isActive ? "activado" : "desactivado"} correctamente.`);
   } catch (e: any) {
     setMsg(e?.message || "Error actualizando cupón");
