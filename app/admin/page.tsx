@@ -583,27 +583,30 @@ export default function AdminPage() {
     }
   };
 
-  const toggleCoupon = async (id: string, isActive: boolean) => {
-    try {
-      setWorkingId(id);
-      const supabase = supabaseBrowser();
+ const toggleCoupon = async (id: string, isActive: boolean) => {
+  try {
+    setWorkingId(id);
+    setMsg("");
 
-      const { error } = await supabase
-        .from("coupons")
-        .update({
-          is_active: !isActive,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+    const supabase = supabaseBrowser();
 
-      if (error) throw error;
-      await load();
-    } catch (e: any) {
-      setMsg(e?.message || "Error actualizando cupón");
-    } finally {
-      setWorkingId("");
-    }
-  };
+    const { error } = await supabase
+      .from("coupons")
+      .update({
+        is_active: !isActive,
+      })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    await load();
+    setMsg(`Cupón ${!isActive ? "activado" : "desactivado"} correctamente.`);
+  } catch (e: any) {
+    setMsg(e?.message || "Error actualizando cupón");
+  } finally {
+    setWorkingId("");
+  }
+};
 
   const createLocation = async () => {
     try {
