@@ -583,42 +583,27 @@ export default function AdminPage() {
     }
   };
 
- const toggleCoupon = async (id: string, isActive: boolean) => {
+ const deleteCoupon = async (id: string) => {
   try {
+    const ok = window.confirm("¿Seguro que quieres eliminar este cupón?");
+    if (!ok) return;
+
     setWorkingId(id);
     setMsg("");
 
     const supabase = supabaseBrowser();
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("coupons")
-      .update({
-        is_active: !isActive,
-      })
-      .eq("id", id)
-      .select();
+      .delete()
+      .eq("id", id);
 
-    if (error) {
-      setMsg("Error Supabase: " + error.message);
-      throw error;
-    }
+    if (error) throw error;
 
-    if (!data || data.length === 0) {
-      setMsg("No se actualizó ningún cupón. Puede ser un problema de permisos o de filtro.");
-      return;
-    }
-
-    setCoupons((prev) =>
-      prev.map((coupon) =>
-        coupon.id === id
-          ? { ...coupon, is_active: !isActive }
-          : coupon
-      )
-    );
-
-    setMsg(`Cupón ${!isActive ? "activado" : "desactivado"} correctamente.`);
+    await load();
+    setMsg("Cupón eliminado correctamente.");
   } catch (e: any) {
-    setMsg(e?.message || "Error actualizando cupón");
+    setMsg(e?.message || "Error eliminando cupón");
   } finally {
     setWorkingId("");
   }
@@ -672,7 +657,30 @@ export default function AdminPage() {
       setMsg(e?.message || "Error creando ciudad");
     }
   };
+  const toggleCoupon = async (id: string, isActive: boolean) => {
+  try {
+    setWorkingId(id);
+    setMsg("");
 
+    const supabase = supabaseBrowser();
+
+    const { error } = await supabase
+      .from("coupons")
+      .update({
+        is_active: !isActive,
+      })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    await load();
+    setMsg("Cupón actualizado correctamente.");
+  } catch (e: any) {
+    setMsg(e?.message || "Error actualizando cupón");
+  } finally {
+    setWorkingId("");
+  }
+};
   const toggleLocationFeatured = async (
     id: string,
     currentValue: boolean | null
@@ -1384,18 +1392,29 @@ const markAsRead = async (id: string) => {
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => toggleCoupon(coupon.id, coupon.is_active)}
-                    disabled={workingId === coupon.id}
-                    style={{ ...darkBtn, marginTop: 16 }}
-                  >
-                    {workingId === coupon.id
-                      ? "Procesando..."
-                      : coupon.is_active
-                      ? "Desactivar"
-                      : "Activar"}
-                  </button>
+                  <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+  <button
+    type="button"
+    onClick={() => toggleCoupon(coupon.id, coupon.is_active)}
+    disabled={workingId === coupon.id}
+    style={darkBtn}
+  >
+    {workingId === coupon.id
+      ? "Procesando..."
+      : coupon.is_active
+      ? "Desactivar"
+      : "Activar"}
+  </button>
+
+  <button
+    type="button"
+    onClick={() => deleteCoupon(coupon.id)}
+    disabled={workingId === coupon.id}
+    style={rejectBtn}
+  >
+    {workingId === coupon.id ? "Procesando..." : "Eliminar"}
+  </button>
+</div>
                 </div>
               ))}
             </div>
