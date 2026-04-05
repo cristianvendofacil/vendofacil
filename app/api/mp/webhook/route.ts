@@ -185,22 +185,19 @@ console.log("MP WEBHOOK BODY RAW:", bodyText);
     const mp = new MercadoPagoConfig({ accessToken });
     const paymentApi = new Payment(mp);
 
-    let payment: any;
-    try {
-      payment = await paymentApi.get({ id: String(paymentId) });
-    } catch (e: any) {
-      const msg = String(e?.message || "").toLowerCase();
+    let payment: any = null;
 
-      if (msg.includes("payment not found") || msg.includes("not_found")) {
-        return NextResponse.json({
-          ok: true,
-          ignored: "payment_not_found",
-          paymentId: String(paymentId),
-        });
-      }
+try {
+  payment = await paymentApi.get({ id: String(paymentId) });
+} catch (e: any) {
+  console.error("ERROR GET PAYMENT:", e);
 
-      throw e;
-    }
+  return NextResponse.json({
+    ok: true,
+    ignored: "payment_fetch_failed",
+    paymentId: String(paymentId),
+  });
+}
 
     const status = String(payment.status || "");
     const externalRef = String(payment.external_reference || "");
