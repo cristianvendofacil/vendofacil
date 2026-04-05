@@ -106,10 +106,11 @@ console.log("MP preference result:", {
   id: result.id,
 });
     return NextResponse.json({
-      ok: true,
-      init_point: result.init_point,
-      sandbox_init_point: result.sandbox_init_point,
-    });
+  ok: true,
+  init_point: result.init_point,
+  sandbox_init_point: result.sandbox_init_point,
+  debug_id: result.id,
+});
   } catch (e: any) {
     console.error("MP create-preference error:", e);
     return NextResponse.json(
