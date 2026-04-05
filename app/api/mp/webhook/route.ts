@@ -1,22 +1,9 @@
 import { NextResponse } from "next/server";
 
-export async function POST(req: Request) {
-  try {
-    const bodyText = await req.text();
+export async function POST() {
+  console.log("WEBHOOK HIT FAST");
 
-    console.log("WEBHOOK TEST HIT", {
-      url: req.url,
-      body: bodyText,
-    });
-
-    return NextResponse.json({ ok: true, test: true });
-  } catch (e: any) {
-    console.error("WEBHOOK TEST ERROR:", e);
-    return NextResponse.json(
-      { error: e?.message || "Webhook test error" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ ok: true });
 }
 
 export async function GET() {
