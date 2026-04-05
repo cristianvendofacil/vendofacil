@@ -139,18 +139,25 @@ console.log("MP WEBHOOK BODY RAW:", bodyText);
     }
 
     const bodyType = String(body?.type || body?.topic || "").trim();
+const action = String(body?.action || "").trim();
 
-    let paymentId =
-      url.searchParams.get("data.id") ||
-      body?.data?.id ||
-      body?.id ||
-      (typeof body?.resource === "string" &&
-      body.resource.includes("/payments/")
-        ? body.resource.split("/").pop()
-        : null);
+let paymentId =
+  url.searchParams.get("data.id") ||
+  body?.data?.id ||
+  body?.id ||
+  (typeof body?.resource === "string" &&
+  body.resource.includes("/payments/")
+    ? body.resource.split("/").pop()
+    : null);
 
-    const isMerchantOrder =
-      topic === "merchant_order" || bodyType === "merchant_order";
+const isMerchantOrder =
+  topic === "merchant_order" ||
+  bodyType === "merchant_order" ||
+  topic === "topic_merchant_order_wh" ||
+  bodyType === "topic_merchant_order_wh" ||
+  action === "topic_merchant_order_wh" ||
+  action === "merchant_order.updated" ||
+  action === "merchant_order";
 
     if (isMerchantOrder) {
       const merchantOrderId =
