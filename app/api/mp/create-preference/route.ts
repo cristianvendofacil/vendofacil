@@ -100,7 +100,11 @@ export async function POST(req: Request) {
         auto_return: "approved",
       },
     });
-
+console.log("MP preference result:", {
+  init_point: result.init_point,
+  sandbox_init_point: result.sandbox_init_point,
+  id: result.id,
+});
     return NextResponse.json({
       ok: true,
       init_point: result.init_point,
