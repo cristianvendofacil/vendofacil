@@ -116,12 +116,20 @@ export async function POST(req: Request) {
     }
 
     const url = new URL(req.url);
-    const topic =
-      url.searchParams.get("topic") ||
-      url.searchParams.get("type") ||
-      "";
 
-    const bodyText = await req.text();
+console.log("MP WEBHOOK HIT", {
+  fullUrl: req.url,
+  query: Object.fromEntries(url.searchParams.entries()),
+});
+
+const topic =
+  url.searchParams.get("topic") ||
+  url.searchParams.get("type") ||
+  "";
+
+const bodyText = await req.text();
+
+console.log("MP WEBHOOK BODY RAW:", bodyText);
 
     let body: any = {};
     try {
