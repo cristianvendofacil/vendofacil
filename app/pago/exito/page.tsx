@@ -22,10 +22,6 @@ export default function Page() {
       try {
         const itemId = String(params.get("itemId") || "").trim();
         const itemType = String(params.get("itemType") || "").trim();
-        const plan = String(params.get("plan") || "").trim();
-        const featured = params.get("featured") === "1";
-        const urgent = params.get("urgent") === "1";
-        const petrol = params.get("petrol") === "1";
 
         if (!itemId || !itemType) {
           setMsg("Faltan datos para confirmar la publicación.");
@@ -35,37 +31,14 @@ export default function Page() {
         const supabase = supabaseBrowser();
         const table = resolveTable(itemType);
 
-        const publishedUntil = new Date(
-          Date.now() + 30 * 24 * 60 * 60 * 1000
-        ).toISOString();
-
-        const updateData: any = {
-          status: "PUBLISHED",
-          published_until: publishedUntil,
-        };
-
-        if (table === "listings") {
-          updateData.is_published = true;
-        }
-
-        if (table === "verification_requests") {
-          updateData.status = "PENDING_REVIEW";
-          updateData.payment_status = "APPROVED";
-          updateData.paid_at = new Date().toISOString();
-        }
-
-        if (featured) {
-          updateData.featured_until = publishedUntil;
-        }
-
-        if (urgent) {
-          updateData.urgent_until = publishedUntil;
-        }
-
-        if (petrol) {
-          updateData.petrol_priority = true;
-          updateData.petrol_priority_until = publishedUntil;
-        }
+        const updateData: any =
+          table === "verification_requests"
+            ? {
+                status: "PENDING_REVIEW",
+              }
+            : {
+                status: "PUBLISHED",
+              };
 
         let res = await supabase
           .from(table)
@@ -114,7 +87,10 @@ export default function Page() {
         setMsg("Pago aprobado y anuncio publicado correctamente.");
       } catch (e: any) {
         console.error("PAGO EXITO UPDATE ERROR:", e);
-        setMsg(e?.message || "El pago fue aprobado, pero no se pudo confirmar la publicación.");
+        setMsg(
+          e?.message ||
+            "El pago fue aprobado, pero no se pudo confirmar la publicación."
+        );
       }
     };
 
