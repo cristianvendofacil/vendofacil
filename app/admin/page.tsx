@@ -325,76 +325,87 @@ export default function AdminPage() {
   };
 
   const approveVerification = async (id: string) => {
-    try {
-      setWorkingId(id);
-      const supabase = supabaseBrowser();
+  try {
+    setWorkingId(id);
+    const supabase = supabaseBrowser();
 
-      const { data: request, error: fetchError } = await supabase
-        .from("verification_requests")
-        .select("*")
-        .eq("id", id)
-        .single();
+    const { data: request, error: fetchError } = await supabase
+      .from("verification_requests")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-      if (fetchError) throw fetchError;
+    if (fetchError) throw fetchError;
 
-      const until = new Date();
-      until.setFullYear(until.getFullYear() + 1);
+    const notes = String(request?.notes || "");
+    let months = 12;
 
-      const { error } = await supabase
-        .from("verification_requests")
-        .update({
-          status: "APPROVED",
+    if (notes.includes("VERIFIED_3M")) {
+      months = 3;
+    } else if (notes.includes("VERIFIED_6M")) {
+      months = 6;
+    } else if (notes.includes("VERIFIED_12M")) {
+      months = 12;
+    }
+
+    const until = new Date();
+    until.setMonth(until.getMonth() + months);
+
+    const { error } = await supabase
+      .from("verification_requests")
+      .update({
+        status: "APPROVED",
+        is_verified: true,
+        verified_until: until.toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    const { error: syncError } = await supabase
+      .from("user_verifications")
+      .upsert(
+        {
+          user_id: request.user_id,
           is_verified: true,
+          verification_type: request.verification_type,
           verified_until: until.toISOString(),
-        })
-        .eq("id", id);
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
 
-      if (error) throw error;
+    if (syncError) throw syncError;
 
-      const { error: syncError } = await supabase
-        .from("user_verifications")
-        .upsert(
-          {
-            user_id: request.user_id,
-            is_verified: true,
-            verification_type: request.verification_type,
-            verified_until: until.toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
-        );
+    await load();
+  } catch (e: any) {
+    setMsg(e?.message || "Error aprobando verificación");
+  } finally {
+    setWorkingId("");
+  }
+};
 
-      if (syncError) throw syncError;
+const rejectVerification = async (id: string) => {
+  try {
+    setWorkingId(id);
+    const supabase = supabaseBrowser();
 
-      await load();
-    } catch (e: any) {
-      setMsg(e?.message || "Error aprobando verificación");
-    } finally {
-      setWorkingId("");
-    }
-  };
+    const { error } = await supabase
+      .from("verification_requests")
+      .update({
+        status: "REJECTED",
+        is_verified: false,
+      })
+      .eq("id", id);
 
-  const rejectVerification = async (id: string) => {
-    try {
-      setWorkingId(id);
-      const supabase = supabaseBrowser();
-
-      const { error } = await supabase
-        .from("verification_requests")
-        .update({
-          status: "REJECTED",
-          is_verified: false,
-        })
-        .eq("id", id);
-
-      if (error) throw error;
-      await load();
-    } catch (e: any) {
-      setMsg(e?.message || "Error rechazando verificación");
-    } finally {
-      setWorkingId("");
-    }
-  };
+    if (error) throw error;
+    await load();
+  } catch (e: any) {
+    setMsg(e?.message || "Error rechazando verificación");
+  } finally {
+    setWorkingId("");
+  }
+};
 
   const togglePetrolPriority = async (
     table: "listings" | "classifieds" | "jobs" | "meals",

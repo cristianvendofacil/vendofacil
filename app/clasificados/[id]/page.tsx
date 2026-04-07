@@ -9,6 +9,7 @@ const BUCKET = "classified-photos";
 
 type Item = {
   id: string;
+  user_id: string | null;
   title: string | null;
   town: string | null;
   description: string | null;
@@ -29,6 +30,7 @@ export default function ClasificadoDetallePage() {
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [msg, setMsg] = useState("Cargando...");
+  const [isVerifiedOwner, setIsVerifiedOwner] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -53,6 +55,22 @@ export default function ClasificadoDetallePage() {
 
         const row = data as Item;
         setItem(row);
+        if (row.user_id) {
+  const { data: verData } = await supabase
+    .from("user_verifications")
+    .select("is_verified, verified_until")
+    .eq("user_id", row.user_id)
+    .maybeSingle();
+
+  const verified =
+    !!verData?.is_verified &&
+    !!verData?.verified_until &&
+    new Date(verData.verified_until).getTime() > Date.now();
+
+  setIsVerifiedOwner(verified);
+} else {
+  setIsVerifiedOwner(false);
+}
 
         await supabase
           .from("classifieds")
@@ -129,7 +147,25 @@ export default function ClasificadoDetallePage() {
               <Badge bg="#E5E7EB" text="📦 Clasificado" dark />
             </div>
 
-            <h1 style={titleStyle}>{item.title || "Sin título"}</h1>
+            <h1 style={titleStyle}>
+  {item.title || "Sin título"}{" "}
+  {isVerifiedOwner && (
+    <span
+      style={{
+        marginLeft: 10,
+        fontSize: 18,
+        fontWeight: 900,
+        background: "linear-gradient(135deg,#22c55e,#16a34a)",
+        color: "white",
+        padding: "4px 10px",
+        borderRadius: 999,
+        boxShadow: "0 4px 12px rgba(34,197,94,0.3)",
+      }}
+    >
+      ✔ Verificado
+    </span>
+  )}
+</h1>
 
             <div style={metaRow}>
               <div style={townStyle}>📍 {item.town || "Sin ciudad"}</div>
