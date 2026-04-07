@@ -34,7 +34,8 @@ export default function AnunciosPage() {
             "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at"
           )
           .eq("status", "PUBLISHED")
-          .order("created_at", { ascending: false });
+.gt("expires_at", new Date().toISOString())
+.order("created_at", { ascending: false })
 
         if (error) throw error;
 

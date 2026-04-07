@@ -5,9 +5,6 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 const BUCKET = "verification-files";
-const PERSON_PRICE = 3000;
-const BUSINESS_PRICE = 5000;
-const DURATION_DAYS = 365;
 
 type LocationRow = {
   id: string;
@@ -17,6 +14,29 @@ type LocationRow = {
   is_featured: boolean | null;
 };
 
+type PricingRule = {
+  id: string;
+  item_type: string;
+  plan_code: string;
+  title: string;
+  price_ars: number;
+  is_active: boolean;
+};
+
+type VerificationPlanCode = "VERIFIED_3M" | "VERIFIED_6M" | "VERIFIED_12M";
+
+function planDurationDays(planCode: VerificationPlanCode) {
+  if (planCode === "VERIFIED_3M") return 90;
+  if (planCode === "VERIFIED_6M") return 180;
+  return 365;
+}
+
+function planDurationLabel(planCode: VerificationPlanCode) {
+  if (planCode === "VERIFIED_3M") return "3 meses";
+  if (planCode === "VERIFIED_6M") return "6 meses";
+  return "12 meses";
+}
+
 export default function Page() {
   const router = useRouter();
 
@@ -25,6 +45,7 @@ export default function Page() {
   const [uploading, setUploading] = useState(false);
 
   const [verificationType, setVerificationType] = useState<"PERSON" | "BUSINESS">("PERSON");
+  const [planCode, setPlanCode] = useState<VerificationPlanCode>("VERIFIED_12M");
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -36,22 +57,46 @@ export default function Page() {
   const [notes, setNotes] = useState("");
 
   const [locations, setLocations] = useState<LocationRow[]>([]);
+  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
 
   const [userId, setUserId] = useState("");
   const [documentFrontPath, setDocumentFrontPath] = useState<string | null>(null);
   const [documentBackPath, setDocumentBackPath] = useState<string | null>(null);
   const [servicePhotoPath, setServicePhotoPath] = useState<string | null>(null);
 
+  const selectedRule = useMemo(() => {
+    return (
+      pricingRules.find(
+        (x) =>
+          x.item_type === "verification" &&
+          x.plan_code === planCode &&
+          x.is_active
+      ) || null
+    );
+  }, [pricingRules, planCode]);
+
   const amount = useMemo(() => {
-    return verificationType === "BUSINESS" ? BUSINESS_PRICE : PERSON_PRICE;
-  }, [verificationType]);
+    return selectedRule?.price_ars ?? 0;
+  }, [selectedRule]);
+
+  const durationDays = useMemo(() => {
+    return planDurationDays(planCode);
+  }, [planCode]);
+
+  const durationLabel = useMemo(() => {
+    return planDurationLabel(planCode);
+  }, [planCode]);
 
   useEffect(() => {
     const load = async () => {
       try {
         const supabase = supabaseBrowser();
 
-        const [{ data: userRes, error: userErr }, { data: locationRes }] = await Promise.all([
+        const [
+          { data: userRes, error: userErr },
+          { data: locationRes, error: locationErr },
+          { data: pricingRes, error: pricingErr },
+        ] = await Promise.all([
           supabase.auth.getUser(),
           supabase
             .from("locations")
@@ -59,9 +104,18 @@ export default function Page() {
             .order("is_featured", { ascending: false })
             .order("region", { ascending: true })
             .order("name", { ascending: true }),
+          supabase
+            .from("pricing_rules")
+            .select("id,item_type,plan_code,title,price_ars,is_active")
+            .eq("item_type", "verification")
+            .eq("is_active", true)
+            .order("plan_code", { ascending: true }),
         ]);
 
         if (userErr) throw userErr;
+        if (locationErr) throw locationErr;
+        if (pricingErr) throw pricingErr;
+
         if (!userRes.user) {
           window.location.href = "/login?next=/verificacion";
           return;
@@ -69,10 +123,8 @@ export default function Page() {
 
         setUserId(userRes.user.id);
         setEmail(userRes.user.email || "");
-
-        if (locationRes) {
-          setLocations((locationRes ?? []) as LocationRow[]);
-        }
+        setLocations((locationRes ?? []) as LocationRow[]);
+        setPricingRules((pricingRes ?? []) as PricingRule[]);
       } catch (e: any) {
         setMsg(e?.message || "Error cargando verificación");
       }
@@ -145,6 +197,10 @@ export default function Page() {
       if (userErr) throw userErr;
       if (!userRes.user) throw new Error("Debes iniciar sesión.");
 
+      if (!selectedRule) {
+        throw new Error("No hay un precio activo para este plan de verificación.");
+      }
+
       if (!fullName.trim()) {
         throw new Error("Completa nombre y apellido.");
       }
@@ -195,12 +251,16 @@ export default function Page() {
               notes.trim() ? notes.trim() : null,
               `Negocio: ${businessName.trim()}`,
               `Dato fiscal: ${taxId.trim()}`,
+              `Plan: ${planCode}`,
+              `Duración: ${durationLabel}`,
             ]
               .filter(Boolean)
               .join(" | ")
           : [
               notes.trim() ? notes.trim() : null,
               `Documento: ${documentNumber.trim()}`,
+              `Plan: ${planCode}`,
+              `Duración: ${durationLabel}`,
             ]
               .filter(Boolean)
               .join(" | ");
@@ -233,8 +293,10 @@ export default function Page() {
 
       router.push(
         `/pagar?itemId=${encodeURIComponent(savedRequest.id)}&itemType=verification&title=${encodeURIComponent(
-          verificationType === "BUSINESS" ? "Negocio verificado" : "Perfil verificado"
-        )}&plan=${encodeURIComponent(verificationType)}&amount=${amount}&durationDays=${DURATION_DAYS}`
+          verificationType === "BUSINESS"
+            ? "Negocio verificado"
+            : "Perfil verificado"
+        )}&plan=${encodeURIComponent(planCode)}&amount=${amount}&durationDays=${durationDays}`
       );
     } catch (e: any) {
       setMsg(e?.message || "Error preparando verificación");
@@ -280,13 +342,15 @@ export default function Page() {
           onClick={() => setVerificationType("PERSON")}
           style={{
             ...planCard,
-            border: verificationType === "PERSON" ? "2px solid #0a7cff" : "1px solid #ddd",
+            border:
+              verificationType === "PERSON"
+                ? "2px solid #0a7cff"
+                : "1px solid #ddd",
             background: "white",
           }}
         >
           <strong>Perfil verificado</strong>
-          <div style={{ marginTop: 6 }}>${PERSON_PRICE} / 12 meses</div>
-          <small>Ideal para particulares.</small>
+          <div style={{ marginTop: 6 }}>Ideal para particulares.</div>
         </button>
 
         <button
@@ -294,13 +358,78 @@ export default function Page() {
           onClick={() => setVerificationType("BUSINESS")}
           style={{
             ...planCard,
-            border: verificationType === "BUSINESS" ? "2px solid gold" : "1px solid #ddd",
+            border:
+              verificationType === "BUSINESS"
+                ? "2px solid gold"
+                : "1px solid #ddd",
             background: "#fffbe6",
           }}
         >
           <strong>Negocio verificado</strong>
-          <div style={{ marginTop: 6 }}>${BUSINESS_PRICE} / 12 meses</div>
-          <small>Ideal para comercios, empleadores o servicios.</small>
+          <div style={{ marginTop: 6 }}>
+            Ideal para comercios, empleadores o servicios.
+          </div>
+        </button>
+      </div>
+
+      <h2 style={{ marginTop: 28 }}>Elegí la duración</h2>
+
+      <div style={{ display: "grid", gap: 14, marginTop: 10 }}>
+        <button
+          type="button"
+          onClick={() => setPlanCode("VERIFIED_3M")}
+          style={{
+            ...planCard,
+            border:
+              planCode === "VERIFIED_3M"
+                ? "2px solid #0a7cff"
+                : "1px solid #ddd",
+            background: "white",
+          }}
+        >
+          <strong>Verificado 3 meses</strong>
+          <div style={{ marginTop: 6 }}>
+            ${pricingRules.find((x) => x.plan_code === "VERIFIED_3M")?.price_ars ?? 0} / 3 meses
+          </div>
+          <small>Ideal para probar el sello verificado.</small>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPlanCode("VERIFIED_6M")}
+          style={{
+            ...planCard,
+            border:
+              planCode === "VERIFIED_6M"
+                ? "2px solid #0a7cff"
+                : "1px solid #ddd",
+            background: "white",
+          }}
+        >
+          <strong>Verificado 6 meses</strong>
+          <div style={{ marginTop: 6 }}>
+            ${pricingRules.find((x) => x.plan_code === "VERIFIED_6M")?.price_ars ?? 0} / 6 meses
+          </div>
+          <small>Buen equilibrio entre duración y precio.</small>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPlanCode("VERIFIED_12M")}
+          style={{
+            ...planCard,
+            border:
+              planCode === "VERIFIED_12M"
+                ? "2px solid gold"
+                : "1px solid #ddd",
+            background: "#fffbe6",
+          }}
+        >
+          <strong>Verificado 12 meses</strong>
+          <div style={{ marginTop: 6 }}>
+            ${pricingRules.find((x) => x.plan_code === "VERIFIED_12M")?.price_ars ?? 0} / 12 meses
+          </div>
+          <small>La opción más completa.</small>
         </button>
       </div>
 
@@ -390,13 +519,21 @@ export default function Page() {
       >
         <div>
           <div style={uploadLabel}>Foto frente del documento</div>
-          <input type="file" accept="image/*" onChange={handleFileChange("front", setDocumentFrontPath)} />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange("front", setDocumentFrontPath)}
+          />
           {documentFrontPath && <div style={uploadOk}>Archivo cargado ✅</div>}
         </div>
 
         <div>
           <div style={uploadLabel}>Foto dorso del documento</div>
-          <input type="file" accept="image/*" onChange={handleFileChange("back", setDocumentBackPath)} />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange("back", setDocumentBackPath)}
+          />
           {documentBackPath && <div style={uploadOk}>Archivo cargado ✅</div>}
         </div>
 
@@ -406,15 +543,15 @@ export default function Page() {
               ? "Prueba del negocio / servicio / constancia"
               : "Servicio / comprobante / prueba adicional"}
           </div>
-          <input type="file" accept="image/*" onChange={handleFileChange("service", setServicePhotoPath)} />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange("service", setServicePhotoPath)}
+          />
           {servicePhotoPath && <div style={uploadOk}>Archivo cargado ✅</div>}
         </div>
 
-        {uploading && (
-          <div style={{ fontWeight: 700 }}>
-            Subiendo archivo...
-          </div>
-        )}
+        {uploading && <div style={{ fontWeight: 700 }}>Subiendo archivo...</div>}
       </div>
 
       <div
@@ -428,10 +565,15 @@ export default function Page() {
       >
         <div style={{ fontWeight: 800 }}>Resumen</div>
         <div style={{ marginTop: 6 }}>
-          Tipo: <b>{verificationType === "PERSON" ? "Perfil verificado" : "Negocio verificado"}</b>
+          Tipo:{" "}
+          <b>
+            {verificationType === "PERSON"
+              ? "Perfil verificado"
+              : "Negocio verificado"}
+          </b>
         </div>
         <div style={{ marginTop: 6 }}>
-          Duración: <b>12 meses</b>
+          Duración: <b>{durationLabel}</b>
         </div>
         <div style={{ marginTop: 6 }}>
           Total: <b>${amount} ARS</b>
