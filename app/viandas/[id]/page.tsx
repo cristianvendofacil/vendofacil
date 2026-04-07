@@ -51,7 +51,8 @@ export default function ViandaDetallePage() {
           .from("meals")
           .select("*")
           .eq("id", id)
-          .single();
+  .eq("status", "PUBLISHED")
+  .single();
 
         if (error || !data) {
           throw new Error("No se encontró la vianda.");

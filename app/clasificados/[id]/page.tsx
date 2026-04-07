@@ -41,10 +41,11 @@ export default function ClasificadoDetallePage() {
         const supabase = supabaseBrowser();
 
         const { data, error } = await supabase
-          .from("classifieds")
-          .select("*")
-          .eq("id", id)
-          .single();
+  .from("classifieds")
+  .select("*")
+  .eq("id", id)
+  .eq("status", "PUBLISHED")
+  .single();
 
         if (error || !data) {
           throw new Error("No se encontró el clasificado.");

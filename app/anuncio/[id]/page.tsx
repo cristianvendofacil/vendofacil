@@ -54,12 +54,13 @@ export default function AnuncioDetallePage() {
         const supabase = supabaseBrowser();
 
         const { data, error } = await supabase
-          .from("listings")
-          .select(
-            "id,user_id,title,town,description,price,currency,whatsapp,views,photo_paths,featured_until,urgent_until,petrol_priority,petrol_priority_until"
-          )
-          .eq("id", id)
-          .single();
+  .from("listings")
+  .select(
+    "id,user_id,title,town,description,price,currency,whatsapp,views,photo_paths,featured_until,urgent_until,petrol_priority,petrol_priority_until,status"
+  )
+  .eq("id", id)
+  .eq("status", "PUBLISHED")
+  .single();
 
         if (error || !data) {
           throw new Error("No se encontró el anuncio.");
