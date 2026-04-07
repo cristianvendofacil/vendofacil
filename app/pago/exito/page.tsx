@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 function resolveTable(itemType: string) {
@@ -13,13 +12,15 @@ function resolveTable(itemType: string) {
 }
 
 export default function Page() {
-  const params = useSearchParams();
   const [msg, setMsg] = useState("Procesando pago...");
   const [done, setDone] = useState(false);
+  const [backHref, setBackHref] = useState("/");
 
   useEffect(() => {
     const run = async () => {
       try {
+        const params = new URLSearchParams(window.location.search);
+
         const itemId = String(params.get("itemId") || "").trim();
         const itemType = String(params.get("itemType") || "").trim();
 
@@ -28,17 +29,26 @@ export default function Page() {
           return;
         }
 
+        const nextBackHref =
+          itemType === "classified"
+            ? "/mis-clasificados"
+            : itemType === "job"
+            ? "/mis-empleos"
+            : itemType === "meal"
+            ? "/mis-viandas"
+            : itemType === "verification"
+            ? "/verificacion"
+            : "/mis-anuncios";
+
+        setBackHref(nextBackHref);
+
         const supabase = supabaseBrowser();
         const table = resolveTable(itemType);
 
         const updateData: any =
           table === "verification_requests"
-            ? {
-                status: "PENDING_REVIEW",
-              }
-            : {
-                status: "PUBLISHED",
-              };
+            ? { status: "PENDING_REVIEW" }
+            : { status: "PUBLISHED" };
 
         let res = await supabase
           .from(table)
@@ -95,29 +105,13 @@ export default function Page() {
     };
 
     run();
-  }, [params]);
-
-  const itemType = String(params.get("itemType") || "").trim();
-
-  const backHref =
-    itemType === "classified"
-      ? "/mis-clasificados"
-      : itemType === "job"
-      ? "/mis-empleos"
-      : itemType === "meal"
-      ? "/mis-viandas"
-      : itemType === "verification"
-      ? "/verificacion"
-      : "/mis-anuncios";
+  }, []);
 
   return (
     <main style={{ padding: 40, fontFamily: "system-ui", maxWidth: 900 }}>
       <h1>Pago aprobado ✅</h1>
       <p>{msg}</p>
-
-      <a href={backHref}>
-        {done ? "Ir a tu panel →" : "Volver →"}
-      </a>
+      <a href={backHref}>{done ? "Ir a tu panel →" : "Volver →"}</a>
     </main>
   );
 }
