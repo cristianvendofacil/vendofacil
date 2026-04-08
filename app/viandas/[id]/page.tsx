@@ -9,6 +9,7 @@ const BUCKET = "meal-photos";
 
 type Meal = {
   id: string | null;
+  user_id: string | null;
   title: string | null;
   town: string | null;
   description: string | null;
@@ -33,6 +34,7 @@ export default function ViandaDetallePage() {
   const id = params?.id;
 
   const [meal, setMeal] = useState<Meal | null>(null);
+  const [verification, setVerification] = useState<any>(null);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const [msg, setMsg] = useState("Cargando...");
@@ -60,6 +62,15 @@ export default function ViandaDetallePage() {
 
         const row = data as Meal;
         setMeal(row);
+        if (row.user_id) {
+  const { data: verData } = await supabase
+    .from("user_verifications")
+    .select("is_verified, verified_until")
+    .eq("user_id", row.user_id)
+    .maybeSingle();
+
+  setVerification(verData || null);
+}
 
         await supabase
           .from("meals")
@@ -100,6 +111,13 @@ export default function ViandaDetallePage() {
     if (!meal?.featured_until) return false;
     return new Date(meal.featured_until).getTime() > Date.now();
   }, [meal]);
+  const isVerifiedOwner = useMemo(() => {
+  return (
+    !!verification?.is_verified &&
+    !!verification?.verified_until &&
+    new Date(verification.verified_until).getTime() > Date.now()
+  );
+}, [verification]);
 
   const whatsappHref = meal?.whatsapp
     ? `https://wa.me/${meal.whatsapp.replace(/[^\d]/g, "")}`
@@ -236,16 +254,21 @@ export default function ViandaDetallePage() {
             </section>
           </div>
 
-          <aside
-            style={{
-              ...asideCard,
-              border: isUrgent
-                ? "2px solid #DC2626"
-                : isFeatured
-                ? "2px solid #F59E0B"
-                : "1px solid #E5E7EB",
-            }}
-          >
+         <aside
+  style={{
+    ...asideCard,
+    border: isVerifiedOwner
+      ? "2px solid #22c55e"
+      : isUrgent
+      ? "2px solid #DC2626"
+      : isFeatured
+      ? "2px solid #F59E0B"
+      : "1px solid #E5E7EB",
+    boxShadow: isVerifiedOwner
+      ? "0 0 0 2px rgba(34,197,94,0.15), 0 14px 30px rgba(15,23,42,0.06)"
+      : asideCard.boxShadow,
+  }}
+>
             <div style={asideTopLabel}>Precio</div>
 
             <div style={asidePriceStyle}>
