@@ -188,7 +188,28 @@ export default function AnuncioDetallePage() {
               />
             </div>
 
-            <h1 style={titleStyle}>{item.title || "Sin título"}</h1>
+            <h1 style={titleStyle}>
+  {item.title || "Sin título"}{" "}
+  {isVerifiedOwner && (
+    <span
+      style={{
+        marginLeft: 10,
+        fontSize: 18,
+        fontWeight: 900,
+        background: "linear-gradient(135deg,#22c55e,#16a34a)",
+        color: "white",
+        padding: "4px 10px",
+        borderRadius: 999,
+        boxShadow: "0 4px 12px rgba(34,197,94,0.3)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      ✔ Verificado
+    </span>
+  )}
+</h1>
 
             <div style={metaRow}>
               <div style={townStyle}>📍 {item.town || "Sin ciudad"}</div>
