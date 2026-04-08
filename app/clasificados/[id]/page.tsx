@@ -228,15 +228,20 @@ export default function ClasificadoDetallePage() {
           </div>
 
           <aside
-            style={{
-              ...asideCard,
-              border: isUrgent
-                ? "2px solid #DC2626"
-                : isFeatured
-                ? "2px solid #F59E0B"
-                : "1px solid #E5E7EB",
-            }}
-          >
+  style={{
+    ...asideCard,
+    border: isVerifiedOwner
+      ? "2px solid #22c55e"
+      : isUrgent
+      ? "2px solid #DC2626"
+      : isFeatured
+      ? "2px solid #F59E0B"
+      : "1px solid #E5E7EB",
+    boxShadow: isVerifiedOwner
+      ? "0 0 0 2px rgba(34,197,94,0.15), 0 14px 30px rgba(15,23,42,0.06)"
+      : asideCard.boxShadow,
+  }}
+>
             <div style={asideTopLabel}>Precio</div>
 
             <div style={asidePriceStyle}>
