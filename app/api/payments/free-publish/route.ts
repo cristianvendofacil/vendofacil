@@ -45,17 +45,27 @@ export async function POST(req: Request) {
     const table = resolveTable(itemType);
 
     const now = new Date();
-    const plus30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const plus9 = new Date(now.getTime() + 9 * 24 * 60 * 60 * 1000).toISOString();
+    const plus30 = new Date(
+      now.getTime() + 30 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const plus9 = new Date(
+      now.getTime() + 9 * 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const payload: Record<string, any> = {
       status: "PUBLISHED",
+      expires_at: plus30,
+      published_until: plus30,
       featured: featured,
       featured_until: featured ? plus30 : null,
       urgent_until: urgent ? plus9 : null,
       petrol_priority: petrol,
       petrol_priority_until: petrol ? plus30 : null,
     };
+
+    if (table === "listings") {
+      payload.is_published = true;
+    }
 
     const { error } = await supabase
       .from(table)
