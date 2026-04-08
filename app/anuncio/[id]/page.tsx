@@ -136,6 +136,13 @@ export default function AnuncioDetallePage() {
     if (!item?.petrol_priority_until) return false;
     return new Date(item.petrol_priority_until).getTime() > Date.now();
   }, [item]);
+  const isVerifiedOwner = useMemo(() => {
+  return (
+    !!verification?.is_verified &&
+    !!verification?.verified_until &&
+    new Date(verification.verified_until).getTime() > Date.now()
+  );
+}, [verification]);
 
   const whatsappHref = item?.whatsapp
     ? `https://wa.me/${item.whatsapp.replace(/[^\d]/g, "")}`
@@ -242,19 +249,24 @@ export default function AnuncioDetallePage() {
               </p>
             </section>
           </div>
+<aside
+  style={{
+    ...asideCard,
+    border: isVerifiedOwner
+      ? "2px solid #22c55e"
+      : isPetrol
+      ? "2px solid #F97316"
+      : isUrgent
+      ? "2px solid #DC2626"
+      : isFeatured
+      ? "2px solid #F59E0B"
+      : "1px solid #E5E7EB",
 
-          <aside
-            style={{
-              ...asideCard,
-              border: isPetrol
-                ? "2px solid #F97316"
-                : isUrgent
-                ? "2px solid #DC2626"
-                : isFeatured
-                ? "2px solid #F59E0B"
-                : "1px solid #E5E7EB",
-            }}
-          >
+    boxShadow: isVerifiedOwner
+      ? "0 0 0 2px rgba(34,197,94,0.15), 0 14px 30px rgba(15,23,42,0.06)"
+      : asideCard.boxShadow,
+  }}
+>
             <div style={asideTopLabel}>Precio</div>
 
             <div style={asidePriceStyle}>
