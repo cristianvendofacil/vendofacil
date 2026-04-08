@@ -7,6 +7,7 @@ import FavoriteButton from "../../components/FavoriteButton";
 
 type Job = {
   id: string;
+  user_id: string | null;
   title: string | null;
   town: string | null;
   description: string | null;
@@ -32,6 +33,7 @@ export default function TrabajoDetallePage() {
 
   const [item, setItem] = useState<Job | null>(null);
   const [msg, setMsg] = useState("Cargando...");
+  const [verification, setVerification] = useState<any>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -56,6 +58,15 @@ export default function TrabajoDetallePage() {
 
         const row = data as Job;
         setItem(row);
+        if (row.user_id) {
+  const { data: verData } = await supabase
+    .from("user_verifications")
+    .select("is_verified, verified_until")
+    .eq("user_id", row.user_id)
+    .maybeSingle();
+
+  setVerification(verData || null);
+}
 
         await supabase
           .from("jobs")
@@ -86,6 +97,13 @@ export default function TrabajoDetallePage() {
     if (!item?.petrol_priority_until) return false;
     return new Date(item.petrol_priority_until).getTime() > Date.now();
   }, [item]);
+  const isVerifiedOwner = useMemo(() => {
+  return (
+    !!verification?.is_verified &&
+    !!verification?.verified_until &&
+    new Date(verification.verified_until).getTime() > Date.now()
+  );
+}, [verification]);
 
   const whatsappHref = item?.whatsapp
     ? `https://wa.me/${item.whatsapp.replace(/[^\d]/g, "")}`
@@ -117,12 +135,17 @@ export default function TrabajoDetallePage() {
         <div style={topGrid}>
           <div>
             <div style={badgeRow}>
-              {isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
-              {!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
-              {!isPetrol && !isUrgent && isFeatured && (
-                <Badge bg="#92400E" text="⭐ DESTACADO" />
-              )}
-              <Badge bg="#E5E7EB" text={jobTypeLabel(item.job_type)} dark />
+              {isVerifiedOwner && (
+  <Badge bg="#22c55e" text="✔ Verificado" />
+)}
+
+{isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
+{!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
+{!isPetrol && !isUrgent && isFeatured && (
+  <Badge bg="#92400E" text="⭐ DESTACADO" />
+)}
+
+<Badge bg="#E5E7EB" text={jobTypeLabel(item.job_type)} dark />
             </div>
 
             <h1 style={titleStyle}>{item.title || "Sin título"}</h1>
@@ -140,18 +163,23 @@ export default function TrabajoDetallePage() {
             </section>
           </div>
 
-          <aside
-            style={{
-              ...asideCard,
-              border: isPetrol
-                ? "2px solid #F97316"
-                : isUrgent
-                ? "2px solid #DC2626"
-                : isFeatured
-                ? "2px solid #F59E0B"
-                : "1px solid #E5E7EB",
-            }}
-          >
+         <aside
+  style={{
+    ...asideCard,
+    border: isVerifiedOwner
+      ? "2px solid #22c55e"
+      : isPetrol
+      ? "2px solid #F97316"
+      : isUrgent
+      ? "2px solid #DC2626"
+      : isFeatured
+      ? "2px solid #F59E0B"
+      : "1px solid #E5E7EB",
+    boxShadow: isVerifiedOwner
+      ? "0 0 0 2px rgba(34,197,94,0.15), 0 14px 30px rgba(15,23,42,0.06)"
+      : asideCard.boxShadow,
+  }}
+>
             <div style={asideTopLabel}>Tipo</div>
 
             <div style={asideMainValue}>
