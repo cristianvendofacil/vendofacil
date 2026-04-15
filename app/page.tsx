@@ -16,6 +16,8 @@ type Listing = {
   featured_until: string | null;
   created_at: string;
   status?: string;
+  photo_paths?: string[] | null;
+  photo_url?: string | null;
 };
 
 type LocationOption = {
@@ -59,8 +61,8 @@ export default function HomePage() {
             supabase
               .from("listings")
               .select(
-                "id,title,town,price,currency,petrol_priority,petrol_priority_until,urgent_until,featured_until,created_at,status"
-              )
+  "id,title,town,price,currency,petrol_priority,petrol_priority_until,urgent_until,featured_until,created_at,status,photo_paths"
+)
               .eq("status", "PUBLISHED")
               .order("created_at", { ascending: false })
               .limit(40),
@@ -75,9 +77,37 @@ export default function HomePage() {
 
         if (!listingsError) {
           const rows = (listingsData ?? []) as Listing[];
-          const now = new Date();
 
-          const petrolItems = rows.filter((x) => {
+const firstPaths = rows
+  .map((x) => ({ id: x.id, path: (x.photo_paths || [])[0] }))
+  .filter((x) => !!x.path) as { id: string; path: string }[];
+
+let rowsWithPhoto: Listing[] = rows;
+
+if (firstPaths.length > 0) {
+  const { data: signed } = await supabase.storage
+    .from("classified-photos") // ⚠️ si listings usa otro bucket lo cambiamos después
+    .createSignedUrls(
+      firstPaths.map((x) => x.path),
+      3600
+    );
+
+  const map: Record<string, string> = {};
+
+  firstPaths.forEach((x, i) => {
+    const url = signed?.[i]?.signedUrl;
+    if (url) map[x.id] = url;
+  });
+
+  rowsWithPhoto = rows.map((row) => ({
+    ...row,
+    photo_url: map[row.id] || null,
+  }));
+}
+
+const now = new Date();
+
+          const petrolItems = rowsWithPhoto.filter((x) => {
             const hasBool = x.petrol_priority === true;
             const hasFutureDate =
               !!x.petrol_priority_until &&
@@ -86,13 +116,13 @@ export default function HomePage() {
             return hasBool || hasFutureDate;
           });
 
-          const urgentItems = rows.filter(
+          const urgentItems = rowsWithPhoto.filter(
             (x) =>
               !!x.urgent_until &&
               new Date(x.urgent_until).getTime() > now.getTime()
           );
 
-          const featuredItems = rows.filter(
+          const featuredItems = rowsWithPhoto.filter(
             (x) =>
               !!x.featured_until &&
               new Date(x.featured_until).getTime() > now.getTime()
@@ -101,7 +131,7 @@ export default function HomePage() {
           setPetrol(petrolItems.slice(0, 4));
           setUrgent(urgentItems.slice(0, 4));
           setFeatured(featuredItems.slice(0, 4));
-          setLatest(rows.slice(0, 4));
+          setLatest(rowsWithPhoto.slice(0, 4));
         }
 
         if (!locationsError && locationsData && locationsData.length > 0) {
@@ -516,9 +546,21 @@ function ListingCard({ item }: { item: Listing }) {
           )}
         </div>
 
-        <div className="vf-home-listing-image">
-          <span>VF</span>
-        </div>
+        <div className="vf-home-listing-image" style={{ position: "relative" }}>
+  {item.photo_url ? (
+    <img
+      src={item.photo_url}
+      alt={item.title || "foto"}
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+      }}
+    />
+  ) : (
+    <span>VF</span>
+  )}
+</div>
       </div>
 
       <div className="vf-home-listing-body">

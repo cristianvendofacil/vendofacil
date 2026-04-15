@@ -115,6 +115,20 @@ export default function ClasificadoDetallePage() {
   const whatsappHref = item?.whatsapp
     ? `https://wa.me/${item.whatsapp.replace(/[^\d]/g, "")}`
     : null;
+    const shareUrl =
+    typeof window !== "undefined" ? window.location.href : "";
+
+  const shareText = item?.title
+    ? `Mira este anuncio en VendoFácil: ${item.title}`
+    : "Mira este anuncio en VendoFácil";
+
+  const shareWhatsappHref = `https://wa.me/?text=${encodeURIComponent(
+    `${shareText} ${shareUrl}`
+  )}`;
+
+  const shareFacebookHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+    shareUrl
+  )}`;
 
   if (!item) {
     return (
@@ -274,6 +288,36 @@ export default function ClasificadoDetallePage() {
                 </button>
               </a>
             )}
+
+            <div
+              style={{
+                marginTop: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <a
+                href={shareWhatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: "none" }}
+              >
+                <button type="button" style={shareWaBtn}>
+                  Compartir por WhatsApp
+                </button>
+              </a>
+
+              <a
+                href={shareFacebookHref}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: "none" }}
+              >
+                <button type="button" style={shareFbBtn}>
+                  Compartir en Facebook
+                </button>
+              </a>
+            </div>
 
             <div style={{ marginTop: 12 }}>
               <FavoriteButton itemType="classified" itemId={item.id} />
@@ -556,6 +600,29 @@ const waBtn: React.CSSProperties = {
   color: "white",
   fontWeight: 900,
   fontSize: 16,
+  cursor: "pointer",
+};
+const shareWaBtn: React.CSSProperties = {
+  width: "100%",
+  padding: 13,
+  borderRadius: 14,
+  border: "1px solid #BBF7D0",
+  background: "#ECFDF5",
+  color: "#166534",
+  fontWeight: 900,
+  fontSize: 15,
+  cursor: "pointer",
+};
+
+const shareFbBtn: React.CSSProperties = {
+  width: "100%",
+  padding: 13,
+  borderRadius: 14,
+  border: "1px solid #BFDBFE",
+  background: "#EFF6FF",
+  color: "#1D4ED8",
+  fontWeight: 900,
+  fontSize: 15,
   cursor: "pointer",
 };
 

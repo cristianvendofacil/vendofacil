@@ -16,6 +16,8 @@ type Classified = {
   petrol_priority_until: string | null;
   views: number | null;
   created_at: string | null;
+  photo_paths: string[] | null;
+  photo_url?: string | null;
 };
 
 export default function ClasificadosPage() {
@@ -31,17 +33,47 @@ export default function ClasificadosPage() {
         const { data, error } = await supabase
           .from("classifieds")
           .select(
-            "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at"
-          )
+  "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at,photo_paths"
+)
           .eq("status", "PUBLISHED")
-          .order("created_at", { ascending: false });
+.gt("expires_at", new Date().toISOString())
+.order("created_at", { ascending: false })
 
         if (error) throw error;
 
         const rows = (data ?? []) as Classified[];
-        const now = Date.now();
 
-        const sorted = [...rows].sort((a, b) => {
+const firstPaths = rows
+  .map((x) => ({ id: x.id, path: (x.photo_paths || [])[0] }))
+  .filter((x) => !!x.path) as { id: string; path: string }[];
+
+let rowsWithPhoto: Classified[] = rows;
+
+if (firstPaths.length > 0) {
+  const { data: signed, error: signErr } = await supabase.storage
+    .from("classified-photos")
+    .createSignedUrls(
+      firstPaths.map((x) => x.path),
+      3600
+    );
+
+  if (signErr) throw signErr;
+
+  const map: Record<string, string> = {};
+  firstPaths.forEach((x, i) => {
+    const url = signed?.[i]?.signedUrl;
+    if (url) map[x.id] = url;
+  });
+
+  rowsWithPhoto = rows.map((row) => ({
+    ...row,
+    photo_url: map[row.id] || null,
+  }));
+}
+
+const now = Date.now();
+
+const sorted = [...rowsWithPhoto].sort((a, b) => {
           const aPetrol =
             a.petrol_priority === true &&
             !!a.petrol_priority_until &&
@@ -281,64 +313,105 @@ export default function ClasificadosPage() {
               key={item.id}
               href={`/clasificados/${item.id}`}
               style={{
-                display: "block",
-                textDecoration: "none",
-                color: "#0F172A",
-                background: "white",
-                border: isPetrol
-                  ? "2px solid #F97316"
-                  : isUrgent
-                  ? "2px solid #DC2626"
-                  : isFeatured
-                  ? "2px solid #F59E0B"
-                  : "1px solid #E5E7EB",
-                borderRadius: 18,
-                overflow: "hidden",
-                boxShadow: "0 10px 30px rgba(15,23,42,0.06)",
-              }}
+  display: "block",
+  textDecoration: "none",
+  color: "#0F172A",
+  background: "white",
+  border: isPetrol
+    ? "2px solid #F97316"
+    : isUrgent
+    ? "2px solid #DC2626"
+    : isFeatured
+    ? "2px solid #F59E0B"
+    : "1px solid #E5E7EB",
+  borderRadius: 18,
+  overflow: "hidden",
+  boxShadow: isPetrol
+    ? "0 14px 34px rgba(249,115,22,0.22)"
+    : isUrgent
+    ? "0 14px 34px rgba(220,38,38,0.18)"
+    : isFeatured
+    ? "0 14px 34px rgba(245,158,11,0.18)"
+    : "0 10px 30px rgba(15,23,42,0.06)",
+  transform: isPetrol || isUrgent || isFeatured ? "translateY(-2px)" : "none",
+}}
             >
               <div
-                style={{
-                  minHeight: 150,
-                  background: isPetrol
-                    ? "linear-gradient(135deg, #7C2D12 0%, #F97316 100%)"
-                    : isUrgent
-                    ? "linear-gradient(135deg, #7F1D1D 0%, #DC2626 100%)"
-                    : isFeatured
-                    ? "linear-gradient(135deg, #78350F 0%, #F59E0B 100%)"
-                    : "linear-gradient(135deg, #0F172A 0%, #334155 100%)",
-                  padding: 16,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
-                  {!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
-                  {!isPetrol && !isUrgent && isFeatured && (
-                    <Badge bg="#92400E" text="⭐ DESTACADO" />
-                  )}
-                </div>
+  style={{
+    position: "relative",
+    minHeight: 220,
+    background: isPetrol
+      ? "linear-gradient(135deg, #7C2D12 0%, #F97316 100%)"
+      : isUrgent
+      ? "linear-gradient(135deg, #7F1D1D 0%, #DC2626 100%)"
+      : isFeatured
+      ? "linear-gradient(135deg, #78350F 0%, #F59E0B 100%)"
+      : "linear-gradient(135deg, #0F172A 0%, #334155 100%)",
+    overflow: "hidden",
+  }}
+>
+  {item.photo_url && (
+    <img
+      src={item.photo_url}
+      alt={item.title || "foto"}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+      }}
+    />
+  )}
 
-                <div
-                  style={{
-                    color: "white",
-                    fontWeight: 900,
-                    fontSize: 24,
-                    lineHeight: 1.08,
-                    letterSpacing: "-0.02em",
-                  }}
-                >
-                  {item.title || "Sin título"}
-                </div>
-              </div>
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      background:
+        "linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.72) 100%)",
+    }}
+  />
+
+  <div
+    style={{
+      position: "relative",
+      zIndex: 1,
+      minHeight: 220,
+      padding: 16,
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "space-between",
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        flexWrap: "wrap",
+      }}
+    >
+      {isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
+      {!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
+      {!isPetrol && !isUrgent && isFeatured && (
+        <Badge bg="#92400E" text="⭐ DESTACADO" />
+      )}
+    </div>
+
+    <div
+      style={{
+        color: "white",
+        fontWeight: 900,
+        fontSize: 24,
+        lineHeight: 1.08,
+        letterSpacing: "-0.02em",
+        textShadow: "0 4px 12px rgba(0,0,0,0.35)",
+      }}
+    >
+      {item.title || "Sin título"}
+    </div>
+  </div>
+</div>
 
               <div style={{ padding: 16 }}>
                 <div
@@ -353,17 +426,59 @@ export default function ClasificadosPage() {
                 </div>
 
                 {item.price !== null && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      color: "#0F172A",
-                      fontWeight: 900,
-                      fontSize: 24,
-                    }}
-                  >
-                    {item.price} {item.currency || ""}
-                  </div>
-                )}
+  <div
+    style={{
+      marginTop: 12,
+      color: "#0F172A",
+      fontWeight: 900,
+      fontSize: 24,
+    }}
+  >
+    {item.price} {item.currency || ""}
+  </div>
+)}
+
+{isPetrol && (
+  <div
+    style={{
+      marginTop: 10,
+      color: "#C2410C",
+      fontWeight: 900,
+      fontSize: 13,
+      letterSpacing: "0.03em",
+    }}
+  >
+    Máxima prioridad en resultados
+  </div>
+)}
+
+{!isPetrol && isUrgent && (
+  <div
+    style={{
+      marginTop: 10,
+      color: "#B91C1C",
+      fontWeight: 900,
+      fontSize: 13,
+      letterSpacing: "0.03em",
+    }}
+  >
+    Publicación urgente activa
+  </div>
+)}
+
+{!isPetrol && !isUrgent && isFeatured && (
+  <div
+    style={{
+      marginTop: 10,
+      color: "#A16207",
+      fontWeight: 900,
+      fontSize: 13,
+      letterSpacing: "0.03em",
+    }}
+  >
+    Publicación destacada activa
+  </div>
+)}
 
                 {!!item.views && (
                   <div
