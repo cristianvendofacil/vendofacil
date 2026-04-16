@@ -5,15 +5,23 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
-async function getClassified(id: string) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+type ClassifiedMetaRow = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  status: string | null;
+  photo_paths: string[] | null;
+};
+
+async function getClassified(id: string): Promise<ClassifiedMetaRow | null> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
   if (!supabaseUrl || !supabaseAnonKey || !id) return null;
 
   const url =
     `${supabaseUrl}/rest/v1/classifieds` +
-    `?select=id,title,description,status` +
+    `?select=id,title,description,status,photo_paths` +
     `&id=eq.${encodeURIComponent(id)}` +
     `&status=eq.PUBLISHED` +
     `&limit=1`;
@@ -28,13 +36,14 @@ async function getClassified(id: string) {
 
   if (!res.ok) return null;
 
-  const rows = await res.json();
+  const rows = (await res.json()) as ClassifiedMetaRow[];
   return rows?.[0] ?? null;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const item = await getClassified(id);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
   const title = item?.title
     ? `${item.title} | VendoFácil`
@@ -45,7 +54,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     : "Mira este clasificado publicado en VendoFácil.";
 
   const url = `https://www.vendofacil.net/clasificados/${id}`;
-  const image = "https://www.vendofacil.net/logo-vendofacil.png";
+
+  const firstPhotoPath =
+    item?.photo_paths &&
+    Array.isArray(item.photo_paths) &&
+    item.photo_paths.length > 0
+      ? item.photo_paths[0]
+      : null;
+
+  const image =
+    firstPhotoPath && supabaseUrl
+      ? `${supabaseUrl}/storage/v1/object/public/classified-photos/${firstPhotoPath}`
+      : "https://www.vendofacil.net/logo-vendofacil.png";
 
   return {
     title,
