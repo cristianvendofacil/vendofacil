@@ -43,6 +43,7 @@ export default function HomePage() {
   const [urgent, setUrgent] = useState<Listing[]>([]);
   const [featured, setFeatured] = useState<Listing[]>([]);
   const [latest, setLatest] = useState<Listing[]>([]);
+  const [allListings, setAllListings] = useState<Listing[]>([]);
 
   const [locations, setLocations] = useState<LocationOption[]>(FALLBACK_LOCATIONS);
   const [searchText, setSearchText] = useState("");
@@ -61,11 +62,11 @@ export default function HomePage() {
             supabase
               .from("listings")
               .select(
-  "id,title,town,price,currency,petrol_priority,petrol_priority_until,urgent_until,featured_until,created_at,status,photo_paths"
-)
+                "id,title,town,price,currency,petrol_priority,petrol_priority_until,urgent_until,featured_until,created_at,status,photo_paths"
+              )
               .eq("status", "PUBLISHED")
               .order("created_at", { ascending: false })
-              .limit(40),
+              .limit(80),
 
             supabase
               .from("locations")
@@ -78,34 +79,34 @@ export default function HomePage() {
         if (!listingsError) {
           const rows = (listingsData ?? []) as Listing[];
 
-const firstPaths = rows
-  .map((x) => ({ id: x.id, path: (x.photo_paths || [])[0] }))
-  .filter((x) => !!x.path) as { id: string; path: string }[];
+          const firstPaths = rows
+            .map((x) => ({ id: x.id, path: (x.photo_paths || [])[0] }))
+            .filter((x) => !!x.path) as { id: string; path: string }[];
 
-let rowsWithPhoto: Listing[] = rows;
+          let rowsWithPhoto: Listing[] = rows;
 
-if (firstPaths.length > 0) {
-  const { data: signed } = await supabase.storage
-    .from("classified-photos") // ⚠️ si listings usa otro bucket lo cambiamos después
-    .createSignedUrls(
-      firstPaths.map((x) => x.path),
-      3600
-    );
+          if (firstPaths.length > 0) {
+            const { data: signed } = await supabase.storage
+              .from("classified-photos")
+              .createSignedUrls(
+                firstPaths.map((x) => x.path),
+                3600
+              );
 
-  const map: Record<string, string> = {};
+            const map: Record<string, string> = {};
 
-  firstPaths.forEach((x, i) => {
-    const url = signed?.[i]?.signedUrl;
-    if (url) map[x.id] = url;
-  });
+            firstPaths.forEach((x, i) => {
+              const url = signed?.[i]?.signedUrl;
+              if (url) map[x.id] = url;
+            });
 
-  rowsWithPhoto = rows.map((row) => ({
-    ...row,
-    photo_url: map[row.id] || null,
-  }));
-}
+            rowsWithPhoto = rows.map((row) => ({
+              ...row,
+              photo_url: map[row.id] || null,
+            }));
+          }
 
-const now = new Date();
+          const now = new Date();
 
           const petrolItems = rowsWithPhoto.filter((x) => {
             const hasBool = x.petrol_priority === true;
@@ -128,10 +129,11 @@ const now = new Date();
               new Date(x.featured_until).getTime() > now.getTime()
           );
 
-          setPetrol(petrolItems.slice(0, 4));
-          setUrgent(urgentItems.slice(0, 4));
-          setFeatured(featuredItems.slice(0, 4));
-          setLatest(rowsWithPhoto.slice(0, 4));
+          setAllListings(rowsWithPhoto);
+          setPetrol(sortListings(rowsWithPhoto, petrolItems).slice(0, 6));
+          setUrgent(sortListings(rowsWithPhoto, urgentItems).slice(0, 6));
+          setFeatured(sortListings(rowsWithPhoto, featuredItems).slice(0, 6));
+          setLatest(rowsWithPhoto.slice(0, 8));
         }
 
         if (!locationsError && locationsData && locationsData.length > 0) {
@@ -154,6 +156,29 @@ const now = new Date();
     () => allTowns.filter((x) => x.is_featured).slice(0, 10),
     [allTowns]
   );
+
+  const effectiveTown = useMemo(() => {
+    if (searchTown.trim()) return searchTown.trim();
+
+    const normalizedUserCity = userCity.toLowerCase().trim();
+    const match = allTowns.find((loc) =>
+      normalizedUserCity.includes(loc.name.toLowerCase())
+    );
+
+    if (match) return match.name;
+
+    return "";
+  }, [searchTown, userCity, allTowns]);
+
+  const localItems = useMemo(() => {
+    if (!effectiveTown) return [];
+
+    const filtered = allListings.filter(
+      (x) => String(x.town || "").trim().toLowerCase() === effectiveTown.toLowerCase()
+    );
+
+    return sortListings(allListings, filtered).slice(0, 6);
+  }, [allListings, effectiveTown]);
 
   const searchHref = useMemo(() => {
     const qs = new URLSearchParams();
@@ -229,22 +254,33 @@ const now = new Date();
 
       <QuickCategories />
 
-      <Section
-        title="🛢 Prioridad petrolera"
-        subtitle="Lo más visible para la actividad energética"
-        items={petrol}
-        href="/anuncio"
-      />
+      <VisibilityBanner />
+
+      {!!localItems.length && effectiveTown && (
+        <Section
+          title={`📍 Oportunidades en ${effectiveTown}`}
+          subtitle="Primero lo que tiene mejor visibilidad en tu zona"
+          items={localItems}
+          href={`/buscar?town=${encodeURIComponent(effectiveTown)}`}
+        />
+      )}
+
       <Section
         title="🔴 Urgentes"
-        subtitle="Publicaciones con necesidad de resolución inmediata"
+        subtitle="Máxima exposición para publicaciones que necesitan resolverse rápido"
         items={urgent}
         href="/anuncio"
       />
       <Section
         title="⭐ Destacados"
-        subtitle="Avisos con mejor exposición y presencia"
+        subtitle="Avisos premium con presencia fuerte en la portada"
         items={featured}
+        href="/anuncio"
+      />
+      <Section
+        title="🛢 Prioridad petrolera"
+        subtitle="Mayor visibilidad para avisos clave en la dinámica energética"
+        items={petrol}
         href="/anuncio"
       />
       <Section
@@ -255,6 +291,43 @@ const now = new Date();
       />
     </main>
   );
+}
+
+function sortListings(allRows: Listing[], rows: Listing[]) {
+  const ids = new Set(rows.map((x) => x.id));
+
+  return allRows
+    .filter((x) => ids.has(x.id))
+    .sort((a, b) => scoreListing(b) - scoreListing(a));
+}
+
+function scoreListing(item: Listing) {
+  let score = 0;
+  const now = Date.now();
+
+  const petrol =
+    !!item.petrol_priority ||
+    (!!item.petrol_priority_until &&
+      new Date(item.petrol_priority_until).getTime() > now);
+
+  const urgent =
+    !!item.urgent_until &&
+    new Date(item.urgent_until).getTime() > now;
+
+  const featured =
+    !!item.featured_until &&
+    new Date(item.featured_until).getTime() > now;
+
+  if (petrol) score += 1000;
+  if (urgent) score += 700;
+  if (featured) score += 400;
+
+  const createdAt = new Date(item.created_at).getTime();
+  if (!Number.isNaN(createdAt)) {
+    score += Math.floor(createdAt / 10000000);
+  }
+
+  return score;
 }
 
 function dedupeLocations(rows: LocationOption[]): LocationOption[] {
@@ -448,6 +521,35 @@ function Hero({
   );
 }
 
+function VisibilityBanner() {
+  return (
+    <section className="vf-container vf-home-visibility-strip">
+      <div className="vf-home-visibility-box">
+        <div className="vf-home-visibility-copy">
+          <div className="vf-home-visibility-kicker">Haz que tu anuncio se vea primero</div>
+          <h2>Más visibilidad = más consultas = más oportunidades de venta o alquiler</h2>
+          <p>
+            Los anuncios con mejor plan aparecen en portada, suben posiciones dentro de su sección
+            y reciben mayor exposición frente a publicaciones normales.
+          </p>
+        </div>
+
+        <div className="vf-home-visibility-points">
+          <div className="vf-home-visibility-item">🔴 Urgente: máxima prioridad</div>
+          <div className="vf-home-visibility-item">⭐ Destacado: portada + mejor posición</div>
+          <div className="vf-home-visibility-item">🛢 Prioridad petrolera: foco en la zona energética</div>
+        </div>
+
+        <div className="vf-home-visibility-actions">
+          <Link href="/publicar" className="vf-btn-primary">
+            Publicar con visibilidad
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function QuickCategories() {
   return (
     <section className="vf-container vf-home-categories">
@@ -535,32 +637,39 @@ function ListingCard({ item }: { item: Listing }) {
   const isFeatured =
     !!item.featured_until && new Date(item.featured_until).getTime() > Date.now();
 
+  const cardClasses = [
+    "vf-home-listing-card",
+    isPetrol ? "vf-card-petrol" : "",
+    isUrgent ? "vf-card-urgent" : "",
+    isFeatured ? "vf-card-featured" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <Link href={`/anuncio/${item.id}`} className="vf-home-listing-card">
+    <Link href={`/anuncio/${item.id}`} className={cardClasses}>
       <div className="vf-home-listing-top">
         <div className="vf-home-listing-badges">
-          {isPetrol && <span className="badge badge-petrol">PRIORIDAD</span>}
-          {!isPetrol && isUrgent && <span className="badge badge-urgent">URGENTE</span>}
-          {!isPetrol && !isUrgent && isFeatured && (
-            <span className="badge badge-featured">DESTACADO</span>
-          )}
+          {isPetrol && <span className="badge badge-petrol">PRIORIDAD PETROLERA</span>}
+          {isUrgent && <span className="badge badge-urgent">URGENTE</span>}
+          {isFeatured && <span className="badge badge-featured">DESTACADO</span>}
         </div>
 
         <div className="vf-home-listing-image" style={{ position: "relative" }}>
-  {item.photo_url ? (
-    <img
-      src={item.photo_url}
-      alt={item.title || "foto"}
-      style={{
-        width: "100%",
-        height: "100%",
-        objectFit: "cover",
-      }}
-    />
-  ) : (
-    <span>VF</span>
-  )}
-</div>
+          {item.photo_url ? (
+            <img
+              src={item.photo_url}
+              alt={item.title || "foto"}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            <span>VF</span>
+          )}
+        </div>
       </div>
 
       <div className="vf-home-listing-body">

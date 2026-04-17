@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 type Listing = {
@@ -19,8 +20,13 @@ type Listing = {
 };
 
 export default function AnunciosPage() {
+  const searchParams = useSearchParams();
+
   const [items, setItems] = useState<Listing[]>([]);
   const [msg, setMsg] = useState("Cargando...");
+  const [selectedTown, setSelectedTown] = useState(searchParams.get("town") || "");
+  const [userCity, setUserCity] = useState("");
+  const [locating, setLocating] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -34,46 +40,13 @@ export default function AnunciosPage() {
             "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at"
           )
           .eq("status", "PUBLISHED")
-.gt("expires_at", new Date().toISOString())
-.order("created_at", { ascending: false })
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false });
 
         if (error) throw error;
 
         const rows = (data ?? []) as Listing[];
-        const now = Date.now();
-
-        const sorted = [...rows].sort((a, b) => {
-          const aPetrol =
-            a.petrol_priority === true &&
-            !!a.petrol_priority_until &&
-            new Date(a.petrol_priority_until).getTime() > now;
-
-          const bPetrol =
-            b.petrol_priority === true &&
-            !!b.petrol_priority_until &&
-            new Date(b.petrol_priority_until).getTime() > now;
-
-          if (aPetrol !== bPetrol) return aPetrol ? -1 : 1;
-
-          const aUrgent =
-            !!a.urgent_until && new Date(a.urgent_until).getTime() > now;
-          const bUrgent =
-            !!b.urgent_until && new Date(b.urgent_until).getTime() > now;
-
-          if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
-
-          const aFeatured =
-            !!a.featured_until && new Date(a.featured_until).getTime() > now;
-          const bFeatured =
-            !!b.featured_until && new Date(b.featured_until).getTime() > now;
-
-          if (aFeatured !== bFeatured) return aFeatured ? -1 : 1;
-
-          const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
-
-          return bCreated - aCreated;
-        });
+        const sorted = [...rows].sort((a, b) => getListingScore(b, selectedTown) - getListingScore(a, selectedTown));
 
         setItems(sorted);
         setMsg(sorted.length ? "" : "No hay anuncios publicados.");
@@ -84,28 +57,56 @@ export default function AnunciosPage() {
     };
 
     load();
-  }, []);
+  }, [selectedTown]);
 
   const summary = useMemo(() => {
     const now = Date.now();
 
-    const petrol = items.filter(
-      (x) =>
-        x.petrol_priority === true &&
-        !!x.petrol_priority_until &&
-        new Date(x.petrol_priority_until).getTime() > now
-    ).length;
+    const petrol = items.filter((x) => isPetrolActive(x, now)).length;
+    const urgent = items.filter((x) => isUrgentActive(x, now)).length;
+    const featured = items.filter((x) => isFeaturedActive(x, now)).length;
+    const local = selectedTown
+      ? items.filter((x) => normalizeTown(x.town) === normalizeTown(selectedTown)).length
+      : 0;
 
-    const urgent = items.filter(
-      (x) => !!x.urgent_until && new Date(x.urgent_until).getTime() > now
-    ).length;
+    return { petrol, urgent, featured, local };
+  }, [items, selectedTown]);
 
-    const featured = items.filter(
-      (x) => !!x.featured_until && new Date(x.featured_until).getTime() > now
-    ).length;
+  const detectNearestTown = () => {
+    if (!navigator.geolocation) return;
 
-    return { petrol, urgent, featured };
-  }, [items]);
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+          );
+
+          const data = await response.json();
+          const text =
+            data?.address?.city ||
+            data?.address?.town ||
+            data?.address?.village ||
+            data?.address?.state ||
+            "";
+
+          setUserCity(text);
+          setSelectedTown(text);
+        } catch {
+          // silencioso
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocating(false);
+      }
+    );
+  };
 
   return (
     <main
@@ -183,6 +184,56 @@ export default function AnunciosPage() {
 
           <div
             style={{
+              marginTop: 14,
+              display: "flex",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <button
+              type="button"
+              onClick={detectNearestTown}
+              style={{
+                border: "1px solid #dbeafe",
+                background: "#eff6ff",
+                color: "#1d4ed8",
+                borderRadius: 12,
+                padding: "10px 14px",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              {locating ? "Detectando ubicación..." : "Usar mi ubicación"}
+            </button>
+
+            {selectedTown && (
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "#334155",
+                  fontWeight: 700,
+                }}
+              >
+                Prioridad local activa: <b>{selectedTown}</b>
+              </div>
+            )}
+
+            {!selectedTown && userCity && (
+              <div
+                style={{
+                  fontSize: 14,
+                  color: "#334155",
+                  fontWeight: 700,
+                }}
+              >
+                Ubicación detectada: <b>{userCity}</b>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
               marginTop: 18,
               display: "flex",
               gap: 12,
@@ -237,7 +288,83 @@ export default function AnunciosPage() {
           <StatCard label="Publicaciones" value={items.length} />
           <StatCard label="Petroleras" value={summary.petrol} accent="#F97316" />
           <StatCard label="Urgentes" value={summary.urgent} accent="#DC2626" />
-          <StatCard label="Destacadas" value={summary.featured} accent="#D97706" />
+          <StatCard
+            label={selectedTown ? `En ${selectedTown}` : "Destacadas"}
+            value={selectedTown ? summary.local : summary.featured}
+            accent={selectedTown ? "#2563EB" : "#D97706"}
+          />
+        </div>
+      </section>
+
+      <section
+        style={{
+          marginTop: 22,
+          background: "linear-gradient(135deg, #0F172A 0%, #1E293B 60%, #334155 100%)",
+          color: "white",
+          borderRadius: 22,
+          padding: 22,
+          display: "grid",
+          gridTemplateColumns: "1.1fr 0.9fr",
+          gap: 18,
+          alignItems: "center",
+          boxShadow: "0 14px 40px rgba(15,23,42,0.14)",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              background: "rgba(249,115,22,0.14)",
+              color: "#FDBA74",
+              border: "1px solid rgba(249,115,22,0.28)",
+              padding: "7px 12px",
+              borderRadius: 999,
+              fontWeight: 900,
+              fontSize: 12,
+              letterSpacing: "0.03em",
+              textTransform: "uppercase",
+            }}
+          >
+            Más visibilidad, más contactos
+          </div>
+
+          <h2
+            style={{
+              margin: "14px 0 0",
+              fontSize: 30,
+              lineHeight: 1.08,
+              fontWeight: 900,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Los avisos pagos aparecen antes y ganan prioridad en la zona del usuario
+          </h2>
+
+          <p
+            style={{
+              marginTop: 12,
+              color: "rgba(255,255,255,0.78)",
+              lineHeight: 1.7,
+              fontSize: 16,
+              maxWidth: 720,
+            }}
+          >
+            En esta sección, los inmuebles con mayor plan de visibilidad suben posiciones,
+            se ven mejor y reciben prioridad cuando coinciden con la localidad elegida o detectada.
+          </p>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <VisibilityPoint text="🔴 Urgente: aparece primero y llama más la atención" />
+          <VisibilityPoint text="⭐ Destacado: mejor presencia dentro de la sección y en portada" />
+          <VisibilityPoint text="🛢 Prioridad petrolera: máxima exposición en la zona energética" />
+          <VisibilityPoint text={selectedTown ? `📍 Prioridad local activa en ${selectedTown}` : "📍 La prioridad local se activa según ciudad elegida o detectada"} />
         </div>
       </section>
 
@@ -264,18 +391,11 @@ export default function AnunciosPage() {
         {items.map((item) => {
           const now = Date.now();
 
-          const isPetrol =
-            item.petrol_priority === true &&
-            !!item.petrol_priority_until &&
-            new Date(item.petrol_priority_until).getTime() > now;
-
-          const isUrgent =
-            !!item.urgent_until &&
-            new Date(item.urgent_until).getTime() > now;
-
-          const isFeatured =
-            !!item.featured_until &&
-            new Date(item.featured_until).getTime() > now;
+          const isPetrol = isPetrolActive(item, now);
+          const isUrgent = isUrgentActive(item, now);
+          const isFeatured = isFeaturedActive(item, now);
+          const isLocalPriority =
+            !!selectedTown && normalizeTown(item.town) === normalizeTown(selectedTown);
 
           return (
             <a
@@ -292,10 +412,18 @@ export default function AnunciosPage() {
                   ? "2px solid #DC2626"
                   : isFeatured
                   ? "2px solid #F59E0B"
+                  : isLocalPriority
+                  ? "1px solid #60A5FA"
                   : "1px solid #E5E7EB",
                 borderRadius: 18,
                 overflow: "hidden",
-                boxShadow: "0 10px 30px rgba(15,23,42,0.06)",
+                boxShadow: isPetrol
+                  ? "0 16px 36px rgba(249,115,22,0.15)"
+                  : isUrgent
+                  ? "0 16px 36px rgba(220,38,38,0.12)"
+                  : isFeatured
+                  ? "0 16px 36px rgba(245,158,11,0.12)"
+                  : "0 10px 30px rgba(15,23,42,0.06)",
               }}
             >
               <div
@@ -307,6 +435,8 @@ export default function AnunciosPage() {
                     ? "linear-gradient(135deg, #7F1D1D 0%, #DC2626 100%)"
                     : isFeatured
                     ? "linear-gradient(135deg, #78350F 0%, #F59E0B 100%)"
+                    : isLocalPriority
+                    ? "linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%)"
                     : "linear-gradient(135deg, #0F172A 0%, #334155 100%)",
                   padding: 16,
                   display: "flex",
@@ -322,10 +452,9 @@ export default function AnunciosPage() {
                   }}
                 >
                   {isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
-                  {!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
-                  {!isPetrol && !isUrgent && isFeatured && (
-                    <Badge bg="#92400E" text="⭐ DESTACADO" />
-                  )}
+                  {isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
+                  {isFeatured && <Badge bg="#92400E" text="⭐ DESTACADO" />}
+                  {isLocalPriority && <Badge bg="#1D4ED8" text="📍 EN TU ZONA" />}
                 </div>
 
                 <div
@@ -401,6 +530,52 @@ export default function AnunciosPage() {
   );
 }
 
+function isPetrolActive(item: Listing, now: number) {
+  const hasBool = item.petrol_priority === true;
+  const hasFutureDate =
+    !!item.petrol_priority_until &&
+    new Date(item.petrol_priority_until).getTime() > now;
+
+  return hasBool || hasFutureDate;
+}
+
+function isUrgentActive(item: Listing, now: number) {
+  return !!item.urgent_until && new Date(item.urgent_until).getTime() > now;
+}
+
+function isFeaturedActive(item: Listing, now: number) {
+  return !!item.featured_until && new Date(item.featured_until).getTime() > now;
+}
+
+function normalizeTown(value: string | null | undefined) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getListingScore(item: Listing, selectedTown?: string) {
+  const now = Date.now();
+  let score = 0;
+
+  const petrol = isPetrolActive(item, now);
+  const urgent = isUrgentActive(item, now);
+  const featured = isFeaturedActive(item, now);
+  const localPriority =
+    !!selectedTown && normalizeTown(item.town) === normalizeTown(selectedTown);
+
+  if (petrol) score += 1000;
+  if (urgent) score += 700;
+  if (featured) score += 400;
+  if (localPriority) score += 250;
+
+  score += Math.min(Number(item.views || 0), 500);
+
+  const createdAt = item.created_at ? new Date(item.created_at).getTime() : 0;
+  if (!Number.isNaN(createdAt)) {
+    score += Math.floor(createdAt / 10000000);
+  }
+
+  return score;
+}
+
 function Badge({ bg, text }: { bg: string; text: string }) {
   return (
     <span
@@ -419,6 +594,24 @@ function Badge({ bg, text }: { bg: string; text: string }) {
     >
       {text}
     </span>
+  );
+}
+
+function VisibilityPoint({ text }: { text: string }) {
+  return (
+    <div
+      style={{
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 14,
+        padding: "12px 14px",
+        color: "white",
+        fontWeight: 800,
+        lineHeight: 1.45,
+      }}
+    >
+      {text}
+    </div>
   );
 }
 
