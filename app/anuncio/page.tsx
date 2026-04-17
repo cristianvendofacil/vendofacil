@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-browser";
 
 type Listing = {
@@ -20,13 +19,16 @@ type Listing = {
 };
 
 export default function AnunciosPage() {
-  const searchParams = useSearchParams();
-
   const [items, setItems] = useState<Listing[]>([]);
   const [msg, setMsg] = useState("Cargando...");
-  const [selectedTown, setSelectedTown] = useState(searchParams.get("town") || "");
+  const [selectedTown, setSelectedTown] = useState("");
   const [userCity, setUserCity] = useState("");
   const [locating, setLocating] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setSelectedTown(params.get("town") || "");
+  }, []);
 
   useEffect(() => {
     const load = async () => {
