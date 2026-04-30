@@ -16,6 +16,7 @@ type Meal = {
   petrol_priority_until: string | null;
   views: number | null;
   created_at: string | null;
+  expires_at: string | null;
   availability?: string | null;
   available_date?: string | null;
   category?: string | null;
@@ -64,14 +65,19 @@ export default function ViandasPage() {
         const { data, error } = await supabase
           .from("meals")
           .select(
-            "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at,availability,available_date,category"
+            "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at,expires_at,availability,available_date,category"
           )
           .eq("status", "PUBLISHED")
           .order("created_at", { ascending: false });
 
         if (error) throw error;
 
-        const rows = (data ?? []) as Meal[];
+        const nowIso = new Date().toISOString();
+
+        const rows = ((data ?? []) as Meal[]).filter((x) => {
+          return !x.expires_at || x.expires_at > nowIso;
+        });
+
         const now = Date.now();
 
         const sorted = [...rows].sort((a, b) => {
