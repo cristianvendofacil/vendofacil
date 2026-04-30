@@ -14,6 +14,19 @@ export function supabaseBrowser(): SupabaseClient {
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
+    global: {
+      fetch: (input, init) => {
+        return fetch(input, {
+          ...init,
+          cache: "no-store",
+          headers: {
+            ...(init?.headers || {}),
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        });
+      },
+    },
   });
 
   return browserClient;
