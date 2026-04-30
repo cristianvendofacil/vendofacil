@@ -16,6 +16,7 @@ type Listing = {
   petrol_priority_until: string | null;
   views: number | null;
   created_at: string | null;
+  expires_at: string | null;
 };
 
 export default function AnunciosPage() {
@@ -39,15 +40,19 @@ export default function AnunciosPage() {
         const { data, error } = await supabase
           .from("listings")
           .select(
-            "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at"
+            "id,title,town,description,price,currency,featured_until,urgent_until,petrol_priority,petrol_priority_until,views,created_at,expires_at"
           )
           .eq("status", "PUBLISHED")
-          .gt("expires_at", new Date().toISOString())
           .order("created_at", { ascending: false });
 
         if (error) throw error;
 
-        const rows = (data ?? []) as Listing[];
+        const nowIso = new Date().toISOString();
+
+        const rows = ((data ?? []) as Listing[]).filter((x) => {
+          return !x.expires_at || x.expires_at > nowIso;
+        });
+
         const sorted = [...rows].sort((a, b) => getListingScore(b, selectedTown) - getListingScore(a, selectedTown));
 
         setItems(sorted);
@@ -210,38 +215,19 @@ export default function AnunciosPage() {
             </button>
 
             {selectedTown && (
-              <div
-                style={{
-                  fontSize: 14,
-                  color: "#334155",
-                  fontWeight: 700,
-                }}
-              >
+              <div style={{ fontSize: 14, color: "#334155", fontWeight: 700 }}>
                 Prioridad local activa: <b>{selectedTown}</b>
               </div>
             )}
 
             {!selectedTown && userCity && (
-              <div
-                style={{
-                  fontSize: 14,
-                  color: "#334155",
-                  fontWeight: 700,
-                }}
-              >
+              <div style={{ fontSize: 14, color: "#334155", fontWeight: 700 }}>
                 Ubicación detectada: <b>{userCity}</b>
               </div>
             )}
           </div>
 
-          <div
-            style={{
-              marginTop: 18,
-              display: "flex",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
+          <div style={{ marginTop: 18, display: "flex", gap: 12, flexWrap: "wrap" }}>
             <a
               href="/publicar?type=listing"
               style={{
@@ -280,13 +266,7 @@ export default function AnunciosPage() {
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: 14,
-          }}
-        >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 14 }}>
           <StatCard label="Publicaciones" value={items.length} />
           <StatCard label="Petroleras" value={summary.petrol} accent="#F97316" />
           <StatCard label="Urgentes" value={summary.urgent} accent="#DC2626" />
@@ -357,12 +337,7 @@ export default function AnunciosPage() {
           </p>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gap: 10,
-          }}
-        >
+        <div style={{ display: "grid", gap: 10 }}>
           <VisibilityPoint text="🔴 Urgente: aparece primero y llama más la atención" />
           <VisibilityPoint text="⭐ Destacado: mejor presencia dentro de la sección y en portada" />
           <VisibilityPoint text="🛢 Prioridad petrolera: máxima exposición en la zona energética" />
@@ -371,13 +346,7 @@ export default function AnunciosPage() {
       </section>
 
       {msg && (
-        <p
-          style={{
-            marginTop: 20,
-            color: "#334155",
-            fontWeight: 700,
-          }}
-        >
+        <p style={{ marginTop: 20, color: "#334155", fontWeight: 700 }}>
           {msg}
         </p>
       )}
@@ -446,13 +415,7 @@ export default function AnunciosPage() {
                   justifyContent: "space-between",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
                   {isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
                   {isFeatured && <Badge bg="#92400E" text="⭐ DESTACADO" />}
@@ -473,52 +436,24 @@ export default function AnunciosPage() {
               </div>
 
               <div style={{ padding: 16 }}>
-                <div
-                  style={{
-                    marginTop: 2,
-                    color: "#64748B",
-                    fontWeight: 700,
-                    fontSize: 14,
-                  }}
-                >
+                <div style={{ marginTop: 2, color: "#64748B", fontWeight: 700, fontSize: 14 }}>
                   📍 {item.town || "Sin ciudad"}
                 </div>
 
                 {item.price !== null && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      color: "#0F172A",
-                      fontWeight: 900,
-                      fontSize: 24,
-                    }}
-                  >
+                  <div style={{ marginTop: 12, color: "#0F172A", fontWeight: 900, fontSize: 24 }}>
                     {item.price} {item.currency || ""}
                   </div>
                 )}
 
                 {!!item.views && (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      fontSize: 13,
-                      color: "#64748B",
-                      fontWeight: 700,
-                    }}
-                  >
+                  <div style={{ marginTop: 10, fontSize: 13, color: "#64748B", fontWeight: 700 }}>
                     👁 {item.views} visitas
                   </div>
                 )}
 
                 {item.description && (
-                  <div
-                    style={{
-                      marginTop: 12,
-                      fontSize: 14,
-                      color: "#475569",
-                      lineHeight: 1.6,
-                    }}
-                  >
+                  <div style={{ marginTop: 12, fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
                     {item.description.slice(0, 110)}
                     {item.description.length > 110 ? "..." : ""}
                   </div>
@@ -636,13 +571,7 @@ function StatCard({
         boxShadow: "0 8px 20px rgba(15,23,42,0.04)",
       }}
     >
-      <div
-        style={{
-          color: "#64748B",
-          fontSize: 14,
-          fontWeight: 700,
-        }}
-      >
+      <div style={{ color: "#64748B", fontSize: 14, fontWeight: 700 }}>
         {label}
       </div>
 
