@@ -44,79 +44,80 @@ export default function AnuncioDetallePage() {
   const [msg, setMsg] = useState("Cargando...");
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        if (!id) {
-          setMsg("ID vacío.");
-          return;
-        }
+    const load = async (retries = 3) => {
+  try {
+    if (!id) {
+      setMsg("ID vacío.");
+      return;
+    }
 
-        const supabase = supabaseBrowser();
+    const supabase = supabaseBrowser();
 
-        const { data, error } = await supabase
-  .from("listings")
-  .select(
-    "id,user_id,title,town,description,price,currency,whatsapp,views,photo_paths,featured_until,urgent_until,petrol_priority,petrol_priority_until,status"
-  )
-  .eq("id", id)
-  .eq("status", "PUBLISHED")
-  .single();
+    const { data, error } = await supabase
+      .from("listings")
+      .select(
+        "id,user_id,title,town,description,price,currency,whatsapp,views,photo_paths,featured_until,urgent_until,petrol_priority,petrol_priority_until,status"
+      )
+      .eq("id", id)
+      .eq("status", "PUBLISHED")
+      .single();
 
-        if (error || !data) {
-          throw new Error("No se encontró el anuncio.");
-        }
-
-        const listing = data as Listing;
-        setItem(listing);
-
-        await supabase
-          .from("listings")
-          .update({ views: (listing.views || 0) + 1 })
-          .eq("id", listing.id);
-
-        if (listing.photo_paths && listing.photo_paths.length > 0) {
-          const { data: signed, error: signError } = await supabase.storage
-            .from(BUCKET)
-            .createSignedUrls(listing.photo_paths, 3600);
-
-          if (signError) throw signError;
-
-          const urls = (signed || [])
-            .map((x) => x?.signedUrl)
-            .filter(Boolean) as string[];
-
-          setPhotoUrls(urls);
-        } else {
-          setPhotoUrls([]);
-        }
-
-        if (listing.user_id) {
-          const { data: verData } = await supabase
-            .from("user_verifications")
-            .select("is_verified,verification_type,status,verified_until")
-            .eq("user_id", listing.user_id)
-            .maybeSingle();
-
-          setVerification((verData as VerificationRow) || null);
-        }
-
-        const { data: similarData, error: similarError } = await supabase
-          .from("listings")
-          .select(
-            "id,user_id,title,town,description,price,currency,whatsapp,views,photo_paths,featured_until,urgent_until,petrol_priority,petrol_priority_until"
-          )
-          .eq("town", listing.town)
-          .neq("id", listing.id)
-          .limit(6);
-
-        if (similarError) throw similarError;
-
-        setSimilar((similarData ?? []) as Listing[]);
-        setMsg("");
-      } catch (e: any) {
-        setMsg(e?.message || "Error cargando anuncio");
+    if (!data) {
+      if (retries > 0) {
+        setTimeout(() => load(retries - 1), 1000);
+        return;
       }
-    };
+      throw new Error("El anuncio todavía se está publicando...");
+    }
+
+    const listing = data as Listing;
+    setItem(listing);
+
+    await supabase
+      .from("listings")
+      .update({ views: (listing.views || 0) + 1 })
+      .eq("id", listing.id);
+
+    if (listing.photo_paths && listing.photo_paths.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from(BUCKET)
+        .createSignedUrls(listing.photo_paths, 3600);
+
+      const urls = (signed || [])
+        .map((x) => x?.signedUrl)
+        .filter(Boolean) as string[];
+
+      setPhotoUrls(urls);
+    } else {
+      setPhotoUrls([]);
+    }
+
+    if (listing.user_id) {
+      const { data: verData } = await supabase
+        .from("user_verifications")
+        .select("is_verified,verification_type,status,verified_until")
+        .eq("user_id", listing.user_id)
+        .maybeSingle();
+
+      setVerification((verData as VerificationRow) || null);
+    }
+
+    const { data: similarData } = await supabase
+      .from("listings")
+      .select(
+        "id,user_id,title,town,description,price,currency,whatsapp,views,photo_paths,featured_until,urgent_until,petrol_priority,petrol_priority_until"
+      )
+      .eq("town", listing.town)
+      .eq("status", "PUBLISHED")
+      .neq("id", listing.id)
+      .limit(6);
+
+    setSimilar((similarData ?? []) as Listing[]);
+    setMsg("");
+  } catch (e: any) {
+    setMsg(e?.message || "Error cargando anuncio");
+  }
+};
 
     load();
   }, [id]);
