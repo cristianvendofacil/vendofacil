@@ -15,6 +15,7 @@ type Job = {
   petrol_priority_until: string | null;
   views: number | null;
   created_at: string | null;
+  expires_at: string | null;
 };
 
 function jobTypeLabel(value?: string | null) {
@@ -42,7 +43,12 @@ export default function TrabajoPage() {
 
         if (error) throw error;
 
-        const rows = (data ?? []) as Job[];
+        const nowIso = new Date().toISOString();
+
+        const rows = ((data ?? []) as Job[]).filter((x) => {
+          return !x.expires_at || x.expires_at > nowIso;
+        });
+
         const now = Date.now();
 
         const sorted = [...rows].sort((a, b) => {
