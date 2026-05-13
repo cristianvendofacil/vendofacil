@@ -189,13 +189,23 @@ export default function Page() {
     }
   };
 
-  const buildPayload = () => ({
+  const buildPayload = () => {
+  console.log("GUARDANDO JOB", {
+    title,
+    town,
+    whatsapp,
+    description,
+    job_type: jobType,
+  });
+
+  return {
     title: title.trim(),
     town: town.trim(),
     whatsapp: whatsapp.trim() || null,
     description: description.trim(),
     job_type: jobType,
-  });
+  };
+};
 
   const saveDraft = async () => {
     try {
