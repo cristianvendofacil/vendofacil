@@ -59,14 +59,14 @@ export default function TrabajoDetallePage() {
         const row = data as Job;
         setItem(row);
         if (row.user_id) {
-  const { data: verData } = await supabase
-    .from("user_verifications")
-    .select("is_verified, verified_until")
-    .eq("user_id", row.user_id)
-    .maybeSingle();
+          const { data: verData } = await supabase
+            .from("user_verifications")
+            .select("is_verified, verified_until")
+            .eq("user_id", row.user_id)
+            .maybeSingle();
 
-  setVerification(verData || null);
-}
+          setVerification(verData || null);
+        }
 
         await supabase
           .from("jobs")
@@ -97,17 +97,33 @@ export default function TrabajoDetallePage() {
     if (!item?.petrol_priority_until) return false;
     return new Date(item.petrol_priority_until).getTime() > Date.now();
   }, [item]);
+
   const isVerifiedOwner = useMemo(() => {
-  return (
-    !!verification?.is_verified &&
-    !!verification?.verified_until &&
-    new Date(verification.verified_until).getTime() > Date.now()
-  );
-}, [verification]);
+    return (
+      !!verification?.is_verified &&
+      !!verification?.verified_until &&
+      new Date(verification.verified_until).getTime() > Date.now()
+    );
+  }, [verification]);
 
   const whatsappHref = item?.whatsapp
     ? `https://wa.me/${item.whatsapp.replace(/[^\d]/g, "")}`
     : null;
+
+  const shareUrl =
+    typeof window !== "undefined" ? window.location.href : "";
+
+  const shareText = item?.title
+    ? `Mira esta publicación en VendoFácil: ${item.title}`
+    : "Mira esta publicación en VendoFácil";
+
+  const shareWhatsappHref = `https://wa.me/?text=${encodeURIComponent(
+    `${shareText} ${shareUrl}`
+  )}`;
+
+  const shareFacebookHref = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+    shareUrl
+  )}`;
 
   if (!item) {
     return (
@@ -136,16 +152,16 @@ export default function TrabajoDetallePage() {
           <div>
             <div style={badgeRow}>
               {isVerifiedOwner && (
-  <Badge bg="#22c55e" text="✔ Verificado" />
-)}
+                <Badge bg="#22c55e" text="✔ Verificado" />
+              )}
 
-{isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
-{!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
-{!isPetrol && !isUrgent && isFeatured && (
-  <Badge bg="#92400E" text="⭐ DESTACADO" />
-)}
+              {isPetrol && <Badge bg="#111827" text="🛢 PRIORIDAD PETROLERA" />}
+              {!isPetrol && isUrgent && <Badge bg="#991B1B" text="🔴 URGENTE" />}
+              {!isPetrol && !isUrgent && isFeatured && (
+                <Badge bg="#92400E" text="⭐ DESTACADO" />
+              )}
 
-<Badge bg="#E5E7EB" text={jobTypeLabel(item.job_type)} dark />
+              <Badge bg="#E5E7EB" text={jobTypeLabel(item.job_type)} dark />
             </div>
 
             <h1 style={titleStyle}>{item.title || "Sin título"}</h1>
@@ -163,23 +179,23 @@ export default function TrabajoDetallePage() {
             </section>
           </div>
 
-         <aside
-  style={{
-    ...asideCard,
-    border: isVerifiedOwner
-      ? "2px solid #22c55e"
-      : isPetrol
-      ? "2px solid #F97316"
-      : isUrgent
-      ? "2px solid #DC2626"
-      : isFeatured
-      ? "2px solid #F59E0B"
-      : "1px solid #E5E7EB",
-    boxShadow: isVerifiedOwner
-      ? "0 0 0 2px rgba(34,197,94,0.15), 0 14px 30px rgba(15,23,42,0.06)"
-      : asideCard.boxShadow,
-  }}
->
+          <aside
+            style={{
+              ...asideCard,
+              border: isVerifiedOwner
+                ? "2px solid #22c55e"
+                : isPetrol
+                ? "2px solid #F97316"
+                : isUrgent
+                ? "2px solid #DC2626"
+                : isFeatured
+                ? "2px solid #F59E0B"
+                : "1px solid #E5E7EB",
+              boxShadow: isVerifiedOwner
+                ? "0 0 0 2px rgba(34,197,94,0.15), 0 14px 30px rgba(15,23,42,0.06)"
+                : asideCard.boxShadow,
+            }}
+          >
             <div style={asideTopLabel}>Tipo</div>
 
             <div style={asideMainValue}>
@@ -216,6 +232,36 @@ export default function TrabajoDetallePage() {
                 </button>
               </a>
             )}
+
+            <div
+              style={{
+                marginTop: 12,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <a
+                href={shareWhatsappHref}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: "none" }}
+              >
+                <button type="button" style={shareWaBtn}>
+                  Compartir por WhatsApp
+                </button>
+              </a>
+
+              <a
+                href={shareFacebookHref}
+                target="_blank"
+                rel="noreferrer"
+                style={{ textDecoration: "none" }}
+              >
+                <button type="button" style={shareFbBtn}>
+                  Compartir en Facebook
+                </button>
+              </a>
+            </div>
 
             <div style={{ marginTop: 12 }}>
               <FavoriteButton itemType="job" itemId={item.id} />
@@ -460,6 +506,30 @@ const waBtn: React.CSSProperties = {
   color: "white",
   fontWeight: 900,
   fontSize: 16,
+  cursor: "pointer",
+};
+
+const shareWaBtn: React.CSSProperties = {
+  width: "100%",
+  padding: 13,
+  borderRadius: 14,
+  border: "1px solid #BBF7D0",
+  background: "#ECFDF5",
+  color: "#166534",
+  fontWeight: 900,
+  fontSize: 15,
+  cursor: "pointer",
+};
+
+const shareFbBtn: React.CSSProperties = {
+  width: "100%",
+  padding: 13,
+  borderRadius: 14,
+  border: "1px solid #BFDBFE",
+  background: "#EFF6FF",
+  color: "#1D4ED8",
+  fontWeight: 900,
+  fontSize: 15,
   cursor: "pointer",
 };
 
