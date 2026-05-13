@@ -250,15 +250,23 @@ export default function Page() {
 
       const supabase = supabaseBrowser();
 
-      const { error: updateError } = await supabase
-        .from("jobs")
-        .update({
-          ...buildPayload(),
-          status: "DRAFT",
-        })
-        .eq("id", id);
+      const { data: savedJob, error: updateError } = await supabase
+  .from("jobs")
+  .update({
+    ...buildPayload(),
+    status: "DRAFT",
+  })
+  .eq("id", id)
+  .select("id,title,town,whatsapp,description,job_type,status")
+  .single();
 
-      if (updateError) throw updateError;
+if (updateError) throw updateError;
+
+if (!savedJob?.title || !savedJob?.town || !savedJob?.description) {
+  throw new Error(
+    "No se guardaron los datos del trabajo. Revisa permisos/RLS de Supabase."
+  );
+}
 
       const planCode = selectedRule.plan_code;
       const planParam = planCodeToPagarPlan(planCode);
