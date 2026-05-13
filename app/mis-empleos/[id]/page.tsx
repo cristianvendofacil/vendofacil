@@ -250,19 +250,29 @@ export default function Page() {
 
       const supabase = supabaseBrowser();
 
-      const { data: savedJob, error: updateError } = await supabase
+      const { error: updateError } = await supabase
   .from("jobs")
   .update({
     ...buildPayload(),
     status: "DRAFT",
   })
-  .eq("id", id)
-  .select("id,title,town,whatsapp,description,job_type,status")
-  .single();
+  .eq("id", id);
 
 if (updateError) throw updateError;
 
-if (!savedJob?.title || !savedJob?.town || !savedJob?.description) {
+const { data: savedJob, error: checkError } = await supabase
+  .from("jobs")
+  .select("id,title,town,whatsapp,description,job_type,status")
+  .eq("id", id)
+  .maybeSingle();
+
+if (checkError) throw checkError;
+
+if (!savedJob) {
+  throw new Error("No se pudo verificar el guardado del trabajo.");
+}
+
+if (!savedJob.title || !savedJob.town || !savedJob.description) {
   throw new Error(
     "No se guardaron los datos del trabajo. Revisa permisos/RLS de Supabase."
   );
